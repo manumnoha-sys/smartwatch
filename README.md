@@ -1,9 +1,48 @@
-# Samsung Galaxy Watch App
+# Health Dashboard
 
-[![Docker Image](https://img.shields.io/badge/ghcr.io-watch--dev-blue?logo=docker)](https://github.com/manumnoha-sys/smartwatch/pkgs/container/watch-dev)
-[![Platform](https://img.shields.io/badge/platform-linux%2Farm64-lightgrey)](https://github.com/manumnoha-sys/smartwatch)
+[![Docker Image](https://img.shields.io/badge/ghcr.io-watch--dev-blue?logo=docker)](https://github.com/manumnoha-sys/health-dashboard/pkgs/container/watch-dev)
+[![Platform](https://img.shields.io/badge/platform-linux%2Farm64-lightgrey)](https://github.com/manumnoha-sys/health-dashboard)
 
-End-to-end project for building a **Samsung Galaxy Watch (Wear OS)** app, with a cloud backend and a Docker-based development environment designed for **Linux arm64** hosts.
+Personal health tracking platform that aggregates **Galaxy Watch sensors**, **CGM glucose readings**, and **CrossFit workouts** into a single cloud backend.
+
+---
+
+## Architecture
+
+```
+┌──────────────────────┐        ┌──────────────────────┐
+│   Galaxy Watch       │        │   Android Phone       │
+│   (Wear OS)          │        │                       │
+│                      │        │  ┌─────────────────┐  │
+│  Health Services:    │        │  │ Glucose Monitor │  │
+│  · Heart rate        │        │  │ (Nightscout /   │  │
+│  · SpO2              │        │  │  Dexcom Share)  │  │
+│  · Steps             │        │  └────────┬────────┘  │
+│  · Calories          │        │           │            │
+│  · Accelerometer     │        │  ┌────────┴────────┐  │
+│                      │        │  │ Wodify CrossFit │  │
+└──────────┬───────────┘        │  │  (REST API)     │  │
+           │  HTTPS             │  └────────┬────────┘  │
+           │  POST /ingest/watch└───────────┼────────────┘
+           │                               │  HTTPS
+           ▼                               ▼
+┌──────────────────────────────────────────────────────┐
+│               Cloud Server  (FastAPI)                │
+│                                                      │
+│   POST /ingest/watch                                 │
+│   POST /ingest/glucose                               │
+│   POST /ingest/workout                               │
+│   GET  /health/snapshot                              │
+│   GET  /health/summary/daily                         │
+│                                                      │
+│   ┌────────────────────────────────────────────────┐ │
+│   │          PostgreSQL 15                         │ │
+│   │  · watch_readings  (time-series)               │ │
+│   │  · glucose_readings (deduped by external_id)   │ │
+│   │  · workouts         (upserted from Wodify)     │ │
+│   └────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────┘
+```
 
 ---
 
@@ -11,50 +50,53 @@ End-to-end project for building a **Samsung Galaxy Watch (Wear OS)** app, with a
 
 ```
 .
-├── infra/          # Docker dev environment (arm64)
-├── watch-app/      # Wear OS application (Samsung Galaxy Watch)
-└── server/         # Cloud backend
+├── infra/          # Docker dev environment (arm64, IntelliJ IDEA)
+├── watch-app/      # Wear OS app — reads sensors, POSTs to server
+├── android-app/    # Android phone app — bridges CGM + Wodify to server
+└── server/         # FastAPI backend — ingests and queries all health data
 ```
-
-### `infra/` — Development Environment
-
-Docker image based on Ubuntu 22.04 with IntelliJ IDEA Community (arm64 native), the Android SDK, Wear OS system image, and all arm64 workarounds baked in. Published to `ghcr.io/manumnoha-sys/watch-dev`.
-
-See [`infra/SETUP.md`](infra/SETUP.md) for a full explanation of the arm64 workarounds.
-
-```bash
-bash infra/build.sh   # build the image
-bash infra/run.sh     # start the container
-bash infra/into.sh    # open a shell inside
-```
-
-### `watch-app/` — Wear OS App
-
-Android application targeting Samsung Galaxy Watch. Developed inside the `infra/` Docker container.
-
-### `server/` — Cloud Backend
-
-Backend service for data sync, push notifications, and the REST API consumed by the watch app.
 
 ---
 
 ## Quick Start
 
+### 1. Run the server
+
 ```bash
-# 1. Start the dev container (pulls from GHCR if image not found locally)
-bash infra/run.sh
+cd server
+cp .env.example .env          # fill in API_KEY and POSTGRES_PASSWORD
+docker compose up -d
+```
 
-# 2. Open a shell inside
-bash infra/into.sh
+API docs at `http://localhost:8000/docs`.
 
-# 3. Build the watch app
+### 2. Build the apps (inside the dev container)
+
+```bash
+bash infra/run.sh && bash infra/into.sh
+
+# Watch app
 cd ~/projects/watch-app && ./gradlew assembleDebug
+
+# Android companion app
+cd ~/projects/android-app && ./gradlew assembleDebug
 ```
 
 ---
 
-## Requirements
+## Authentication
 
-- Linux arm64 (aarch64) host
-- Docker 20+
-- X11 display (for IntelliJ IDEA GUI)
+All endpoints require `X-Api-Key` header. Generate a key once:
+
+```bash
+openssl rand -hex 20
+```
+
+Set it in `server/.env` and `local.properties` in both Android projects.
+
+---
+
+## Docs
+
+- [`infra/SETUP.md`](infra/SETUP.md) — arm64 Docker dev environment and workarounds
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — API reference, data models, data flow

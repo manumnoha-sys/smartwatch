@@ -11,3 +11,15 @@
 # Local secrets
 .env
 secrets/
+
+# Android local config (contains API keys / SDK paths)
+local.properties
+**/local.properties
+
+# Android build artifacts
+**/build/
+**/.gradle/
+**/*.apk
+**/*.aab
+**/captures/
+**/.idea/

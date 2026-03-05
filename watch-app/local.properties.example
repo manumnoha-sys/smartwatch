@@ -1,0 +1,13 @@
+# Copy to local.properties (git-ignored) and fill in values
+
+# Your cloud server URL (no trailing slash)
+serverUrl=https://your-server.example.com
+
+# API key — must match API_KEY in server/.env
+apiKey=replace_with_your_api_key
+
+# Unique identifier for this watch
+deviceId=galaxy-watch-1
+
+# Android SDK path (required by Android tooling)
+sdk.dir=/opt/android-sdk

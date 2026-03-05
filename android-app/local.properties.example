@@ -1,0 +1,20 @@
+# Copy to local.properties (git-ignored) and fill in values
+
+# Cloud server
+serverUrl=https://your-server.example.com
+apiKey=replace_with_your_api_key
+
+# Nightscout (primary CGM source)
+nightscoutUrl=https://your-nightscout.example.com
+nightscoutToken=replace_with_nightscout_token
+
+# Dexcom Share (fallback CGM source — leave blank if using Nightscout only)
+dexcomUsername=
+dexcomPassword=
+
+# Wodify
+wodifyApiKey=replace_with_wodify_api_key
+wodifyAthleteId=replace_with_athlete_id
+
+# Android SDK
+sdk.dir=/opt/android-sdk
