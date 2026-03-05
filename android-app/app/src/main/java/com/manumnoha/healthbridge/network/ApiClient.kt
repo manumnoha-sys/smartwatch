@@ -12,6 +12,21 @@ import java.util.concurrent.TimeUnit
 
 // ── Request / response bodies ────────────────────────────────────────────────
 
+data class WatchReadingJson(
+    val recorded_at: String,
+    val heart_rate_bpm: Float? = null,
+    val heart_rate_accuracy: Int? = null,
+    val spo2_percent: Float? = null,
+    val steps_total: Int? = null,
+    val calories_kcal: Float? = null,
+    val accel_x: Float? = null,
+    val accel_y: Float? = null,
+    val accel_z: Float? = null,
+)
+
+data class WatchIngestRequest(val device_id: String, val readings: List<WatchReadingJson>)
+data class WatchIngestResponse(val accepted: Int, val duplicate_skipped: Int)
+
 data class GlucoseReadingJson(
     val external_id: String,
     val source: String,
@@ -48,6 +63,9 @@ data class WorkoutIngestResponse(val accepted: Int, val updated: Int, val duplic
 // ── Retrofit interface ────────────────────────────────────────────────────────
 
 interface HealthApiService {
+    @POST("ingest/watch")
+    suspend fun ingestWatch(@Body body: WatchIngestRequest): WatchIngestResponse
+
     @POST("ingest/glucose")
     suspend fun ingestGlucose(@Body body: GlucoseIngestRequest): GlucoseIngestResponse
 
