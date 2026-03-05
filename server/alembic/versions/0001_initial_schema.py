@@ -37,19 +37,12 @@ def upgrade() -> None:
     op.create_index("ix_watch_device_recorded", "watch_readings", ["device_id", "recorded_at"])
 
     # --- glucose_readings ---
-    op.execute("""
-        DO $$ BEGIN
-            CREATE TYPE glucose_source_enum AS ENUM ('nightscout', 'dexcom_share');
-        EXCEPTION
-            WHEN duplicate_object THEN null;
-        END $$;
-    """)
-
+    # Use VARCHAR for source — enum validation handled at the Python/Pydantic layer
     op.create_table(
         "glucose_readings",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
         sa.Column("external_id", sa.String(128), nullable=False),
-        sa.Column("source", sa.Enum("nightscout", "dexcom_share", name="glucose_source_enum", create_type=False), nullable=False),
+        sa.Column("source", sa.String(32), nullable=False),
         sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("inserted_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("glucose_mgdl", sa.Float(), nullable=False),
@@ -93,7 +86,6 @@ def downgrade() -> None:
 
     op.drop_index("ix_glucose_recorded", table_name="glucose_readings")
     op.drop_table("glucose_readings")
-    sa.Enum(name="glucose_source_enum").drop(op.get_bind())
 
     op.drop_index("ix_watch_device_recorded", table_name="watch_readings")
     op.drop_table("watch_readings")

@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import BigInteger, DateTime, Enum, Float, Index, Integer, SmallInteger, String, func
+from sqlalchemy import BigInteger, DateTime, Float, Index, Integer, SmallInteger, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.models.base import Base
 
@@ -16,7 +16,7 @@ class GlucoseReading(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     external_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
-    source: Mapped[GlucoseSource] = mapped_column(Enum(GlucoseSource, name="glucose_source_enum"), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     inserted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
