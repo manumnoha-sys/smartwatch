@@ -49,7 +49,7 @@ def upgrade() -> None:
         "glucose_readings",
         sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
         sa.Column("external_id", sa.String(128), nullable=False),
-        sa.Column("source", sa.Enum("nightscout", "dexcom_share", name="glucose_source_enum"), nullable=False),
+        sa.Column("source", sa.Enum("nightscout", "dexcom_share", name="glucose_source_enum", create_type=False), nullable=False),
         sa.Column("recorded_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("inserted_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("glucose_mgdl", sa.Float(), nullable=False),
