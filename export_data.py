@@ -45,7 +45,7 @@ def main():
     print("Fetching sleep (14 days)...")
     write("sleep.json", fetch("/health/sleep?days=14"))
 
-    print("Fetching daily summaries (last 7 days)...")
+    print("Fetching daily summaries (last 7 days for charts)...")
     daily = []
     for i in range(6, -1, -1):
         d = (now - timedelta(days=i)).strftime("%Y-%m-%d")
@@ -53,6 +53,12 @@ def main():
         if result:
             daily.append(result)
     write("daily-7.json", daily)
+
+    print("Fetching individual daily files (last 30 days for date picker)...")
+    for i in range(29, -1, -1):
+        d = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        result = fetch(f"/health/summary/daily?date={d}&tz=UTC")
+        write(f"daily/{d}.json", result)
 
     print("Writing meta...")
     write("meta.json", {"updated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")})
