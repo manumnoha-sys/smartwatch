@@ -60,6 +60,12 @@ def main():
         result = fetch(f"/health/summary/daily?date={d}&tz=UTC")
         write(f"daily/{d}.json", result)
 
+    print("Fetching Tesla latest...")
+    write("tesla/latest.json", fetch("/health/tesla/latest"))
+
+    print("Fetching Tesla history (24h)...")
+    write("tesla/history-24h.json", fetch("/health/tesla/history?hours=24"))
+
     print("Writing meta...")
     write("meta.json", {"updated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ")})
 

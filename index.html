@@ -78,6 +78,15 @@
     <div id="workout-detail"></div>
   </div>
 
+  <!-- Tesla -->
+  <div class="card p-5 mb-6" id="tesla-section">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Tesla</h2>
+      <span id="tesla-updated" class="text-xs text-slate-600"></span>
+    </div>
+    <div id="tesla-content"><p class="text-slate-600 text-sm">Loading…</p></div>
+  </div>
+
   <!-- Sleep history table -->
   <div class="card p-5 mb-6">
     <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Sleep History</h2>
@@ -304,6 +313,115 @@ async function load() {
   }
 }
 
+// ── Tesla ────────────────────────────────────────────────────────────────────
+
+function teslaStatCard(label, value, color = 'text-slate-100') {
+  return `<div class="bg-slate-800/60 rounded-lg p-3">
+    <div class="text-xl font-bold ${color}">${value ?? '—'}</div>
+    <div class="text-xs text-slate-500 mt-0.5">${label}</div>
+  </div>`;
+}
+
+function chargingColor(state) {
+  if (!state) return 'text-slate-400';
+  const s = state.toLowerCase();
+  if (s === 'charging') return 'text-green-400';
+  if (s === 'complete') return 'text-blue-400';
+  if (s === 'disconnected') return 'text-slate-400';
+  return 'text-yellow-400';
+}
+
+function batteryBar(pct) {
+  if (pct == null) return '';
+  const color = pct > 50 ? '#22c55e' : pct > 20 ? '#eab308' : '#ef4444';
+  return `<div class="w-full bg-slate-800 rounded-full h-2 mt-2">
+    <div class="h-2 rounded-full transition-all" style="width:${pct}%;background:${color}"></div>
+  </div>`;
+}
+
+function renderTesla(t) {
+  if (!t) return '<p class="text-slate-600 text-sm">No Tesla data available — poller not yet set up.</p>';
+  const chgState = t.charging_state ?? 'Unknown';
+  const chgClr   = chargingColor(chgState);
+  const doors = ['df','dr','pf','pr','ft','rt'].some(k => t[k] > 0) ? '⚠ Open' : 'Closed';
+  const windows = ['fd_window','rd_window','fp_window','rp_window'].some(k => t[k] > 0) ? '⚠ Open' : 'Closed';
+  const tpms = [t.tpms_fl, t.tpms_fr, t.tpms_rl, t.tpms_rr];
+  const tpmsStr = tpms.every(p => p == null) ? '—' : tpms.map(p => p != null ? p.toFixed(2) : '—').join(' / ');
+
+  const rangeKm = t.battery_range_miles != null ? Math.round(t.battery_range_miles * 1.609) : null;
+
+  let chargingExtra = '';
+  if (chgState === 'Charging') {
+    chargingExtra = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+      ${teslaStatCard('Charger Power', t.charger_power_kw != null ? t.charger_power_kw + ' kW' : null, 'text-green-400')}
+      ${teslaStatCard('Rate', t.charge_rate_mph != null ? t.charge_rate_mph.toFixed(1) + ' mph' : null)}
+      ${teslaStatCard('Added', t.charge_energy_added_kwh != null ? t.charge_energy_added_kwh.toFixed(2) + ' kWh' : null)}
+      ${teslaStatCard('Time to Full', t.minutes_to_full_charge != null ? fmt(t.minutes_to_full_charge) : null, 'text-blue-400')}
+    </div>`;
+  }
+
+  return `
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+    <!-- Battery / Charge -->
+    <div>
+      <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Battery</p>
+      <div class="flex items-end gap-2 mb-1">
+        <span class="text-4xl font-bold text-white">${t.battery_level ?? '—'}<span class="text-xl text-slate-400">%</span></span>
+        <span class="text-sm ${chgClr} mb-1">${chgState}</span>
+        ${t.charge_limit_soc != null ? `<span class="text-xs text-slate-600 mb-1">limit ${t.charge_limit_soc}%</span>` : ''}
+      </div>
+      ${batteryBar(t.battery_level)}
+      <div class="mt-3 text-sm text-slate-400">
+        Range: <span class="text-slate-200 font-medium">${rangeKm != null ? rangeKm + ' km' : '—'}</span>
+        <span class="text-slate-600 ml-1 text-xs">(est ${t.est_battery_range_miles != null ? Math.round(t.est_battery_range_miles * 1.609) + ' km' : '—'})</span>
+      </div>
+      ${chargingExtra}
+    </div>
+
+    <!-- Climate & State -->
+    <div>
+      <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Climate & State</p>
+      <div class="grid grid-cols-2 gap-3">
+        ${teslaStatCard('Inside', t.inside_temp_c != null ? t.inside_temp_c.toFixed(1) + ' °C' : null, 'text-orange-300')}
+        ${teslaStatCard('Outside', t.outside_temp_c != null ? t.outside_temp_c.toFixed(1) + ' °C' : null, 'text-blue-300')}
+        ${teslaStatCard('Climate', t.is_climate_on ? 'On' : 'Off', t.is_climate_on ? 'text-green-400' : 'text-slate-500')}
+        ${teslaStatCard('Preconditioning', t.is_preconditioning ? 'Yes' : 'No', t.is_preconditioning ? 'text-yellow-400' : 'text-slate-500')}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Status row -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+    ${teslaStatCard('Locked', t.locked != null ? (t.locked ? 'Yes' : '⚠ No') : null, t.locked ? 'text-green-400' : 'text-red-400')}
+    ${teslaStatCard('Sentry', t.sentry_mode ? 'On' : 'Off', t.sentry_mode ? 'text-green-400' : 'text-slate-500')}
+    ${teslaStatCard('Doors', doors, doors === 'Closed' ? 'text-slate-300' : 'text-red-400')}
+    ${teslaStatCard('Windows', windows, windows === 'Closed' ? 'text-slate-300' : 'text-yellow-400')}
+    ${teslaStatCard('Odometer', t.odometer_miles != null ? Math.round(t.odometer_miles * 1.609).toLocaleString() + ' km' : null)}
+    ${teslaStatCard('Tires (FL/FR/RL/RR bar)', tpmsStr)}
+    ${teslaStatCard('Software', t.software_version)}
+    ${teslaStatCard('Shift State', t.shift_state ?? 'Parked')}
+  </div>`;
+}
+
+async function loadTesla() {
+  const el = document.getElementById('tesla-content');
+  const upd = document.getElementById('tesla-updated');
+  try {
+    const r = await fetch('data/tesla/latest.json');
+    if (!r.ok) throw new Error();
+    const t = await r.json();
+    if (t && t.recorded_at) {
+      upd.textContent = 'as of ' + new Date(t.recorded_at).toLocaleString();
+    }
+    el.innerHTML = renderTesla(t);
+  } catch {
+    el.innerHTML = renderTesla(null);
+  }
+}
+
 const picker = document.getElementById('workout-date');
 picker.max = todayStr();
 picker.value = todayStr();
@@ -312,6 +430,7 @@ document.getElementById('tz-select').addEventListener('change', () => { load(); 
 
 load();
 loadWorkoutDetail(todayStr());
+loadTesla();
 </script>
 </body>
 </html>
