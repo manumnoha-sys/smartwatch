@@ -8,6 +8,8 @@ import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import com.manumnoha.healthbridge.fitbit.FitbitAuthActivity
 import com.manumnoha.healthbridge.fitbit.FitbitTokenStore
+import com.manumnoha.healthbridge.googlefit.GoogleFitAuthActivity
+import com.manumnoha.healthbridge.googlefit.GoogleFitTokenStore
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,8 +33,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val googleFitBtn = Button(this).apply {
+            text = googleFitButtonLabel()
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, GoogleFitAuthActivity::class.java))
+            }
+        }
+
         layout.addView(statusText)
         layout.addView(fitbitBtn)
+        layout.addView(googleFitBtn)
         setContentView(layout)
     }
 
@@ -57,6 +67,12 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this@MainActivity, FitbitAuthActivity::class.java))
             }
         })
+        layout.addView(Button(this).apply {
+            text = googleFitButtonLabel()
+            setOnClickListener {
+                startActivity(Intent(this@MainActivity, GoogleFitAuthActivity::class.java))
+            }
+        })
         return layout
     }
 
@@ -68,6 +84,7 @@ class MainActivity : AppCompatActivity() {
             Syncing:
             · Samsung Health / Galaxy Watch (every 30 min)
             · Fitbit: $fitbit (every 30 min)
+            · Google Fit: ${if (GoogleFitTokenStore(this).hasTokens()) "connected" else "not connected"} (every 30 min)
             · CGM glucose (every 5 min)
             · Wodify workouts (every 30 min)
 
@@ -77,4 +94,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun fitbitButtonLabel(): String =
         if (FitbitTokenStore(this).hasTokens()) "Reconnect Fitbit" else "Connect Fitbit"
+
+    private fun googleFitButtonLabel(): String =
+        if (GoogleFitTokenStore(this).hasTokens()) "Reconnect Google Fit" else "Connect Google Fit"
 }

@@ -31,6 +31,8 @@ android {
         buildConfigField("String", "WODIFY_API_KEY", "\"${localProps["wodifyApiKey"] ?: ""}\"")
         buildConfigField("String", "WODIFY_ATHLETE_ID", "\"${localProps["wodifyAthleteId"] ?: ""}\"")
         buildConfigField("String", "FITBIT_CLIENT_ID", "\"${localProps["fitbitClientId"] ?: ""}\"")
+        buildConfigField("String", "GOOGLE_FIT_CLIENT_ID", "\"${localProps["googleFitClientId"] ?: ""}\"")
+        buildConfigField("String", "GOOGLE_FIT_CLIENT_SECRET", "\"${localProps["googleFitClientSecret"] ?: ""}\"")
     }
 
     buildFeatures { buildConfig = true }

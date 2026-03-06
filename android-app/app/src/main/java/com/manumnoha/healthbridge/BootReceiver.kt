@@ -6,6 +6,7 @@ import android.content.Intent
 import com.manumnoha.healthbridge.service.BridgeService
 import com.manumnoha.healthbridge.worker.CgmSyncWorker
 import com.manumnoha.healthbridge.worker.FitbitSyncWorker
+import com.manumnoha.healthbridge.worker.GoogleFitSyncWorker
 import com.manumnoha.healthbridge.worker.SamsungHealthSyncWorker
 import com.manumnoha.healthbridge.worker.WodifySyncWorker
 
@@ -17,6 +18,7 @@ class BootReceiver : BroadcastReceiver() {
             WodifySyncWorker.schedule(context)
             SamsungHealthSyncWorker.schedule(context)
             FitbitSyncWorker.schedule(context)
+            GoogleFitSyncWorker.schedule(context)
         }
     }
 }
