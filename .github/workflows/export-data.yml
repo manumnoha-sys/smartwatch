@@ -1,0 +1,31 @@
+name: Export Health Data
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 minutes
+  workflow_dispatch:           # allow manual trigger
+
+jobs:
+  export:
+    runs-on: self-hosted       # NUC runner — has LAN access to 192.168.1.26:8000
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export health data
+        env:
+          HEALTH_API_URL: http://192.168.1.26:8000
+          HEALTH_API_KEY: ${{ secrets.HEALTH_API_KEY }}
+        run: python3 dashboard/export_data.py
+
+      - name: Commit and push
+        run: |
+          git config user.name  "health-export-bot"
+          git config user.email "bot@health-dashboard"
+          git add dashboard/data/
+          git diff --staged --quiet && echo "No changes." || (
+            git commit -m "data: export $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            git push
+          )

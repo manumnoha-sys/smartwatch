@@ -5,7 +5,9 @@ from app.core.security import require_api_key
 from app.schemas.watch import WatchIngestRequest, WatchIngestResponse
 from app.schemas.glucose import GlucoseIngestRequest, GlucoseIngestResponse
 from app.schemas.workout import WorkoutIngestRequest, WorkoutIngestResponse
-from app.services import watch_service, glucose_service, workout_service
+from app.schemas.sleep import SleepIngestRequest, SleepIngestResponse
+from app.schemas.wellness import WellnessIngestRequest, WellnessIngestResponse
+from app.services import watch_service, glucose_service, workout_service, sleep_service, wellness_service
 
 router = APIRouter(
     prefix="/ingest",
@@ -30,3 +32,15 @@ async def ingest_glucose(payload: GlucoseIngestRequest, db: AsyncSession = Depen
 async def ingest_workout(payload: WorkoutIngestRequest, db: AsyncSession = Depends(get_db)):
     result = await workout_service.ingest_workouts(db, payload)
     return WorkoutIngestResponse(**result)
+
+
+@router.post("/sleep", response_model=SleepIngestResponse)
+async def ingest_sleep(payload: SleepIngestRequest, db: AsyncSession = Depends(get_db)):
+    result = await sleep_service.ingest_sleep(db, payload)
+    return SleepIngestResponse(**result)
+
+
+@router.post("/wellness", response_model=WellnessIngestResponse)
+async def ingest_wellness(payload: WellnessIngestRequest, db: AsyncSession = Depends(get_db)):
+    result = await wellness_service.ingest_wellness(db, payload)
+    return WellnessIngestResponse(**result)

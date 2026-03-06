@@ -11,6 +11,9 @@ class SensorReadingIn(BaseModel):
     spo2_accuracy: Optional[int] = None
     steps_total: Optional[int] = None
     calories_kcal: Optional[float] = None
+    active_calories_kcal: Optional[float] = None
+    distance_meters: Optional[float] = None
+    floors_climbed: Optional[float] = None
     accel_x: Optional[float] = None
     accel_y: Optional[float] = None
     accel_z: Optional[float] = None

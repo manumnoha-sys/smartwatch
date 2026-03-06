@@ -8,6 +8,10 @@ import com.manumnoha.healthbridge.network.WatchReadingJson
 import com.manumnoha.healthbridge.network.WatchIngestRequest
 import com.manumnoha.healthbridge.network.WorkoutIngestRequest
 import com.manumnoha.healthbridge.network.WorkoutJson
+import com.manumnoha.healthbridge.network.SleepIngestRequest
+import com.manumnoha.healthbridge.network.SleepSessionJson
+import com.manumnoha.healthbridge.network.WellnessIngestRequest
+import com.manumnoha.healthbridge.network.WellnessSnapshotJson
 import com.manumnoha.healthbridge.samsung.SamsungHealthReader
 import java.time.Instant
 import java.time.ZoneOffset
@@ -51,6 +55,9 @@ class SamsungHealthSyncWorker(context: Context, params: WorkerParameters) :
                         spo2_percent = s.spo2Percent?.toFloat(),
                         steps_total = s.steps?.toInt(),
                         calories_kcal = s.caloriesKcal?.toFloat(),
+                        active_calories_kcal = s.activeCaloriesKcal?.toFloat(),
+                        distance_meters = s.distanceMeters?.toFloat(),
+                        floors_climbed = s.floorsClimbed?.toFloat(),
                     )
                 }
                 val resp = ApiClient.service.ingestWatch(WatchIngestRequest(DEVICE_ID, readings))
@@ -74,6 +81,49 @@ class SamsungHealthSyncWorker(context: Context, params: WorkerParameters) :
                 }
                 val resp = ApiClient.service.ingestWorkout(WorkoutIngestRequest(workouts))
                 Log.i(TAG, "Sessions: accepted=${resp.accepted} updated=${resp.updated}")
+            }
+
+            // ── Wellness snapshots → /ingest/wellness ────────────────────────
+            val wellnessPoints = reader.readWellness(since)
+            Log.i(TAG, "Got ${wellnessPoints.size} wellness points from Health Connect")
+            if (wellnessPoints.isNotEmpty()) {
+                val snapshots = wellnessPoints.map { w ->
+                    WellnessSnapshotJson(
+                        recorded_at = ISO.format(w.recordedAt),
+                        resting_hr_bpm = w.restingHrBpm?.toFloat(),
+                        hrv_rmssd_ms = w.hrvRmssdMs?.toFloat(),
+                        vo2_max = w.vo2Max?.toFloat(),
+                        respiratory_rate_brpm = w.respiratoryRateBrpm?.toFloat(),
+                        skin_temp_celsius = w.skinTempCelsius?.toFloat(),
+                        weight_kg = w.weightKg?.toFloat(),
+                        body_fat_percent = w.bodyFatPercent?.toFloat(),
+                        bmr_kcal = w.bmrKcal?.toFloat(),
+                    )
+                }
+                val resp = ApiClient.service.ingestWellness(WellnessIngestRequest(DEVICE_ID, snapshots))
+                Log.i(TAG, "Wellness: accepted=${resp.accepted} dup=${resp.duplicate_skipped}")
+            }
+
+            // ── Sleep sessions → /ingest/sleep ──────────────────────────────
+            val sleepSessions = reader.readSleep(since)
+            Log.i(TAG, "Got ${sleepSessions.size} sleep sessions from Health Connect")
+            if (sleepSessions.isNotEmpty()) {
+                val sessions = sleepSessions.map { s ->
+                    SleepSessionJson(
+                        external_id = s.externalId,
+                        start_time = ISO.format(s.startTime),
+                        end_time = ISO.format(s.endTime),
+                        duration_minutes = s.durationMinutes,
+                        total_sleep_minutes = s.totalSleepMinutes,
+                        deep_sleep_minutes = s.deepSleepMinutes,
+                        light_sleep_minutes = s.lightSleepMinutes,
+                        rem_sleep_minutes = s.remSleepMinutes,
+                        awake_minutes = s.awakeMinutes,
+                        notes = s.notes,
+                    )
+                }
+                val resp = ApiClient.service.ingestSleep(SleepIngestRequest(sessions))
+                Log.i(TAG, "Sleep: accepted=${resp.accepted} updated=${resp.updated}")
             }
 
             Result.success()

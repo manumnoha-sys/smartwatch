@@ -2,6 +2,7 @@ from datetime import date, datetime
 from typing import Optional
 from pydantic import BaseModel
 from app.schemas.workout import WorkoutIn
+from app.schemas.sleep import SleepSessionOut
 
 
 class HealthSnapshot(BaseModel):
@@ -26,6 +27,7 @@ class DailySummary(BaseModel):
     avg_spo2_percent: Optional[float]
     min_spo2_percent: Optional[float]
     total_steps: Optional[int]
+    total_distance_meters: Optional[float]
     total_calories_kcal: Optional[float]
     avg_glucose_mgdl: Optional[float]
     min_glucose_mgdl: Optional[float]
@@ -33,3 +35,4 @@ class DailySummary(BaseModel):
     time_in_range_percent: Optional[float]  # 70-180 mg/dL
     workout_count: int
     workouts: list[WorkoutIn]
+    sleep_sessions: list[SleepSessionOut] = []

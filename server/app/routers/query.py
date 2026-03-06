@@ -8,14 +8,47 @@ from app.core.security import require_api_key
 from app.models.watch_reading import WatchReading
 from app.models.glucose_reading import GlucoseReading
 from app.models.workout import Workout
+from app.models.sleep_session import SleepSession
+from app.models.wellness_snapshot import WellnessSnapshot
 from app.schemas.query import HealthSnapshot, DailySummary
 from app.schemas.workout import WorkoutIn
+from app.schemas.sleep import SleepSessionOut
+from app.schemas.wellness import WellnessSnapshotOut
 
 router = APIRouter(
     prefix="/health",
     tags=["query"],
     dependencies=[Depends(require_api_key)],
 )
+
+
+@router.get("/wellness", response_model=list[WellnessSnapshotOut])
+async def get_wellness(
+    days: int = Query(default=7, ge=1, le=90),
+    device_id: str = Query(default="samsung-health-phone"),
+    db: AsyncSession = Depends(get_db),
+):
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await db.execute(
+        select(WellnessSnapshot)
+        .where(WellnessSnapshot.device_id == device_id, WellnessSnapshot.recorded_at >= since)
+        .order_by(WellnessSnapshot.recorded_at.desc())
+    )
+    return [WellnessSnapshotOut.model_validate(s.__dict__) for s in result.scalars().all()]
+
+
+@router.get("/sleep", response_model=list[SleepSessionOut])
+async def get_sleep(
+    days: int = Query(default=7, ge=1, le=90),
+    db: AsyncSession = Depends(get_db),
+):
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    result = await db.execute(
+        select(SleepSession)
+        .where(SleepSession.start_time >= since)
+        .order_by(SleepSession.start_time.desc())
+    )
+    return [SleepSessionOut.model_validate(s.__dict__) for s in result.scalars().all()]
 
 
 @router.get("/snapshot", response_model=HealthSnapshot)
@@ -181,6 +214,15 @@ async def get_daily_summary(
     )
     workouts = workouts_result.scalars().all()
 
+    # Sleep sessions for the day
+    sleep_result = await db.execute(
+        select(SleepSession).where(
+            SleepSession.start_time >= day_start,
+            SleepSession.start_time < day_end,
+        ).order_by(SleepSession.start_time)
+    )
+    sleep_sessions = sleep_result.scalars().all()
+
     return DailySummary(
         date=day,
         timezone=tz,
@@ -197,4 +239,5 @@ async def get_daily_summary(
         time_in_range_percent=round(tir, 1) if tir else None,
         workout_count=len(workouts),
         workouts=[WorkoutIn.model_validate(w.__dict__) for w in workouts],
+        sleep_sessions=[SleepSessionOut.model_validate(s.__dict__) for s in sleep_sessions],
     )
