@@ -58,6 +58,12 @@ class SamsungHealthReader(context: Context) {
             .containsAll(HEALTH_CONNECT_PERMISSIONS)
     }
 
+    suspend fun grantedPermissions(): Set<String> {
+        val c = client ?: return emptySet()
+        return c.permissionController.getGrantedPermissions()
+            .intersect(HEALTH_CONNECT_PERMISSIONS)
+    }
+
     /** Read HR + SpO2 + steps + calories in 10-min buckets from [since] to now. */
     suspend fun readSamples(since: Instant): List<HealthConnectSample> {
         val c = client ?: return emptyList()

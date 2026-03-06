@@ -17,7 +17,7 @@ class HealthBridgeApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        startForegroundService(Intent(this, BridgeService::class.java))
+        runCatching { startForegroundService(Intent(this, BridgeService::class.java)) }
         CgmSyncWorker.schedule(this)
         WodifySyncWorker.schedule(this)
         SamsungHealthSyncWorker.schedule(this)

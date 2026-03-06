@@ -13,7 +13,7 @@ import com.manumnoha.healthbridge.worker.WodifySyncWorker
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            context.startForegroundService(Intent(context, BridgeService::class.java))
+            runCatching { context.startForegroundService(Intent(context, BridgeService::class.java)) }
             CgmSyncWorker.schedule(context)
             WodifySyncWorker.schedule(context)
             SamsungHealthSyncWorker.schedule(context)

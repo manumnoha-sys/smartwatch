@@ -22,22 +22,27 @@ class SamsungHealthSyncWorker(context: Context, params: WorkerParameters) :
     CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        Log.i(TAG, "doWork() started")
         val reader = SamsungHealthReader(applicationContext)
 
         if (!reader.isAvailable()) {
             Log.i(TAG, "Health Connect not available on this device — skipping")
             return Result.success()
         }
-        if (!reader.hasPermissions()) {
-            Log.w(TAG, "Health Connect permissions not granted — skipping")
+        val granted = reader.grantedPermissions()
+        if (granted.isEmpty()) {
+            Log.w(TAG, "No Health Connect permissions granted — skipping")
             return Result.success()
         }
+        Log.i(TAG, "Granted permissions: ${granted.size}/${com.manumnoha.healthbridge.samsung.HEALTH_CONNECT_PERMISSIONS.size}")
 
-        val since = Instant.now().minusSeconds(35 * 60) // last 35 min (5-min buffer)
+        val since = Instant.now().minusSeconds(24 * 60 * 60) // last 24 hours
+        Log.i(TAG, "Reading samples since $since")
 
         return try {
             // ── Sensor samples → /ingest/watch ──────────────────────────────
             val samples = reader.readSamples(since)
+            Log.i(TAG, "Got ${samples.size} samples from Health Connect")
             if (samples.isNotEmpty()) {
                 val readings = samples.map { s ->
                     WatchReadingJson(
@@ -54,6 +59,7 @@ class SamsungHealthSyncWorker(context: Context, params: WorkerParameters) :
 
             // ── Exercise sessions → /ingest/workout ─────────────────────────
             val sessions = reader.readSessions(since)
+            Log.i(TAG, "Got ${sessions.size} sessions from Health Connect")
             if (sessions.isNotEmpty()) {
                 val workouts = sessions.map { s ->
                     WorkoutJson(
