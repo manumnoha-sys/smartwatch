@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Health Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #0f1117; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+    .card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; }
+    .stat-value { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .stat-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-top: 4px; }
+    canvas { max-height: 220px; }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-2xl font-bold text-white">Health Dashboard</h1>
+      <p id="last-updated" class="text-sm text-slate-500 mt-1">Loading…</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="status-dot" class="w-2 h-2 rounded-full bg-slate-600"></span>
+      <select id="tz-select" class="bg-slate-800 border border-slate-700 text-sm rounded px-2 py-1 text-slate-300">
+        <option value="America/New_York">New York</option>
+        <option value="America/Chicago">Chicago</option>
+        <option value="America/Denver">Denver</option>
+        <option value="America/Los_Angeles">Los Angeles</option>
+        <option value="UTC">UTC</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Snapshot row -->
+  <div id="snapshot-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+    <div class="card p-4"><div class="stat-value text-rose-400" id="snap-hr">—</div><div class="stat-label">Heart Rate <span class="text-slate-600">bpm</span></div></div>
+    <div class="card p-4"><div class="stat-value text-blue-400" id="snap-spo2">—</div><div class="stat-label">SpO₂ <span class="text-slate-600">%</span></div></div>
+    <div class="card p-4"><div class="stat-value text-green-400" id="snap-steps">—</div><div class="stat-label">Steps today</div></div>
+    <div class="card p-4"><div class="stat-value text-yellow-400" id="snap-dist">—</div><div class="stat-label">Distance <span class="text-slate-600">m</span></div></div>
+    <div class="card p-4"><div class="stat-value text-purple-400" id="snap-sleep">—</div><div class="stat-label">Sleep last night</div></div>
+    <div class="card p-4"><div class="stat-value text-orange-400" id="snap-workout">—</div><div class="stat-label">Last workout</div></div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <div class="card p-5">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Heart Rate — Today</h2>
+      <canvas id="chart-hr"></canvas>
+    </div>
+    <div class="card p-5">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Steps — Last 7 Days</h2>
+      <canvas id="chart-steps"></canvas>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <div class="card p-5">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Sleep Last Night</h2>
+      <canvas id="chart-sleep-donut"></canvas>
+    </div>
+    <div class="card p-5">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Distance — Last 7 Days <span class="text-slate-600 font-normal">(m)</span></h2>
+      <canvas id="chart-dist"></canvas>
+    </div>
+  </div>
+
+  <!-- Sleep history table -->
+  <div class="card p-5 mb-6">
+    <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Sleep History</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-slate-500 border-b border-slate-800">
+            <th class="text-left pb-2 font-medium">Date</th>
+            <th class="text-right pb-2 font-medium">Bedtime</th>
+            <th class="text-right pb-2 font-medium">Duration</th>
+            <th class="text-right pb-2 font-medium">Total Sleep</th>
+            <th class="text-right pb-2 font-medium">Deep</th>
+            <th class="text-right pb-2 font-medium">REM</th>
+            <th class="text-right pb-2 font-medium">Awake</th>
+          </tr>
+        </thead>
+        <tbody id="sleep-table"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Workout history -->
+  <div class="card p-5">
+    <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Recent Workouts</h2>
+    <div id="workout-list" class="space-y-2"></div>
+  </div>
+
+<script>
+function fmt(mins) {
+  if (!mins) return '—';
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+function fmtTime(iso, tz) {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+}
+function fmtDate(iso, tz) {
+  return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz });
+}
+
+const chartDefaults = {
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { grid: { color: '#1e2235' }, ticks: { color: '#475569', font: { size: 11 } } },
+    y: { grid: { color: '#1e2235' }, ticks: { color: '#475569', font: { size: 11 } } },
+  },
+};
+
+let charts = {};
+function makeChart(id, type, data, opts = {}) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), {
+    type, data,
+    options: { responsive: true, maintainAspectRatio: true, ...chartDefaults, ...opts }
+  });
+}
+
+async function load() {
+  const tz = document.getElementById('tz-select').value;
+
+  try {
+    const [snap, sleep7, daily7, meta] = await Promise.all([
+      fetch('data/snapshot.json').then(r => r.json()),
+      fetch('data/sleep.json').then(r => r.json()),
+      fetch('data/daily-7.json').then(r => r.json()),
+      fetch('data/meta.json').then(r => r.json()),
+    ]);
+
+    const today = daily7[daily7.length - 1];
+
+    // Snapshot cards
+    document.getElementById('snap-hr').textContent     = snap.latest_heart_rate_bpm ? Math.round(snap.latest_heart_rate_bpm) : '—';
+    document.getElementById('snap-spo2').textContent   = snap.latest_spo2_percent ? snap.latest_spo2_percent.toFixed(1) : '—';
+    document.getElementById('snap-steps').textContent  = (today?.total_steps ?? 0).toLocaleString();
+    document.getElementById('snap-dist').textContent   = today?.total_distance_meters != null ? Math.round(today.total_distance_meters).toLocaleString() : '—';
+    document.getElementById('snap-workout').textContent = snap.last_workout_result ?? '—';
+
+    const lastSleep = sleep7[0];
+    document.getElementById('snap-sleep').textContent = lastSleep ? fmt(lastSleep.total_sleep_minutes) : '—';
+
+    document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-green-500';
+    document.getElementById('last-updated').textContent = 'Data as of ' + new Date(meta.updated_at).toLocaleString();
+
+    // HR — min/avg/max bar for today
+    makeChart('chart-hr', 'bar', {
+      labels: ['Min', 'Avg', 'Max'],
+      datasets: [{
+        data: [today?.min_heart_rate_bpm, today?.avg_heart_rate_bpm, today?.max_heart_rate_bpm],
+        backgroundColor: ['#3b82f6', '#f43f5e', '#ef4444'],
+        borderRadius: 6,
+      }]
+    });
+
+    // Steps by day
+    const dayLabels = daily7.map(d =>
+      new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+    );
+    makeChart('chart-steps', 'bar', {
+      labels: dayLabels,
+      datasets: [{ data: daily7.map(d => d.total_steps ?? 0), backgroundColor: '#22c55e', borderRadius: 6 }]
+    });
+
+    // Distance by day
+    makeChart('chart-dist', 'bar', {
+      labels: dayLabels,
+      datasets: [{ data: daily7.map(d => Math.round(d.total_distance_meters ?? 0)), backgroundColor: '#eab308', borderRadius: 6 }]
+    });
+
+    // Sleep donut
+    if (lastSleep) {
+      makeChart('chart-sleep-donut', 'doughnut', {
+        labels: ['Deep', 'Light', 'REM', 'Awake'],
+        datasets: [{
+          data: [lastSleep.deep_sleep_minutes ?? 0, lastSleep.light_sleep_minutes ?? 0, lastSleep.rem_sleep_minutes ?? 0, lastSleep.awake_minutes ?? 0],
+          backgroundColor: ['#3b82f6', '#60a5fa', '#a78bfa', '#f87171'],
+          borderColor: '#1a1d27', borderWidth: 3,
+        }]
+      }, {
+        scales: {},
+        plugins: {
+          legend: { display: true, position: 'right', labels: { color: '#94a3b8', font: { size: 12 }, padding: 12 } }
+        },
+        cutout: '65%'
+      });
+    }
+
+    // Sleep table
+    document.getElementById('sleep-table').innerHTML = sleep7.slice(0, 10).map(s => `
+      <tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+        <td class="py-2 text-slate-300">${fmtDate(s.start_time, tz)}</td>
+        <td class="py-2 text-right text-slate-400">${fmtTime(s.start_time, tz)}</td>
+        <td class="py-2 text-right text-slate-300 font-medium">${fmt(s.duration_minutes)}</td>
+        <td class="py-2 text-right text-blue-400">${fmt(s.total_sleep_minutes)}</td>
+        <td class="py-2 text-right text-blue-300">${fmt(s.deep_sleep_minutes)}</td>
+        <td class="py-2 text-right text-purple-400">${fmt(s.rem_sleep_minutes)}</td>
+        <td class="py-2 text-right text-red-400">${fmt(s.awake_minutes)}</td>
+      </tr>`).join('');
+
+    // Workouts
+    const wl = document.getElementById('workout-list');
+    if (today?.workouts?.length) {
+      wl.innerHTML = today.workouts.map(w => `
+        <div class="flex items-center justify-between py-2 border-b border-slate-800/50">
+          <div>
+            <span class="font-medium text-slate-200">${w.wod_name ?? 'Workout'}</span>
+            ${w.notes ? `<span class="text-slate-500 text-xs ml-2">${w.notes}</span>` : ''}
+          </div>
+          <div class="text-right">
+            <span class="text-orange-400 font-semibold">${w.result ?? ''}</span>
+            <span class="text-slate-500 text-xs ml-2">${fmtTime(w.performed_at, tz)}</span>
+          </div>
+        </div>`).join('');
+    } else {
+      wl.innerHTML = '<p class="text-slate-600 text-sm">No workouts today</p>';
+    }
+
+  } catch (e) {
+    document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-red-500';
+    document.getElementById('last-updated').textContent = 'Error loading data';
+    console.error(e);
+  }
+}
+
+document.getElementById('tz-select').addEventListener('change', load);
+load();
+</script>
+</body>
+</html>
