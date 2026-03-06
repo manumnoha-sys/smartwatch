@@ -70,6 +70,14 @@ data class WorkoutJson(
     val location: String? = null,
     val duration_minutes: Int? = null,
     val notes: String? = null,
+    val avg_hr_bpm: Float? = null,
+    val max_hr_bpm: Float? = null,
+    val calories_active_kcal: Float? = null,
+    val zone1_minutes: Int? = null,
+    val zone2_minutes: Int? = null,
+    val zone3_minutes: Int? = null,
+    val zone4_minutes: Int? = null,
+    val zone5_minutes: Int? = null,
 )
 
 data class WorkoutIngestRequest(val workouts: List<WorkoutJson>)

@@ -89,6 +89,14 @@ class SamsungHealthSyncWorker(context: Context, params: WorkerParameters) :
                         result = "${s.durationMinutes} min",
                         duration_minutes = s.durationMinutes,
                         notes = s.notes,
+                        avg_hr_bpm = s.hrZones?.avgHrBpm?.toFloat(),
+                        max_hr_bpm = s.hrZones?.maxHrBpm?.toFloat(),
+                        calories_active_kcal = s.activeCaloriesKcal?.toFloat(),
+                        zone1_minutes = s.hrZones?.zone1Minutes,
+                        zone2_minutes = s.hrZones?.zone2Minutes,
+                        zone3_minutes = s.hrZones?.zone3Minutes,
+                        zone4_minutes = s.hrZones?.zone4Minutes,
+                        zone5_minutes = s.hrZones?.zone5Minutes,
                     )
                 }
                 val resp = ApiClient.service.ingestWorkout(WorkoutIngestRequest(workouts))

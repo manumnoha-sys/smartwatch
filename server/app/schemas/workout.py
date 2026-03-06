@@ -16,6 +16,14 @@ class WorkoutIn(BaseModel):
     location: Optional[str] = None
     duration_minutes: Optional[int] = None
     notes: Optional[str] = None
+    avg_hr_bpm: Optional[float] = None
+    max_hr_bpm: Optional[float] = None
+    calories_active_kcal: Optional[float] = None
+    zone1_minutes: Optional[int] = None
+    zone2_minutes: Optional[int] = None
+    zone3_minutes: Optional[int] = None
+    zone4_minutes: Optional[int] = None
+    zone5_minutes: Optional[int] = None
 
 
 class WorkoutIngestRequest(BaseModel):

@@ -27,6 +27,9 @@ import java.time.Instant
 
 private const val TAG = "SamsungHealthReader"
 
+// Default max HR used for zone computation (bpm). Zones are % of this value.
+private const val DEFAULT_MAX_HR = 190.0
+
 data class HealthConnectSample(
     val recordedAt: Instant,
     val heartRateBpm: Double? = null,
@@ -50,6 +53,16 @@ data class WellnessPoint(
     val bmrKcal: Double? = null,
 )
 
+data class HrZones(
+    val avgHrBpm: Double?,
+    val maxHrBpm: Double?,
+    val zone1Minutes: Int,   // < 60% max HR — recovery
+    val zone2Minutes: Int,   // 60–70% — fat burn
+    val zone3Minutes: Int,   // 70–80% — aerobic
+    val zone4Minutes: Int,   // 80–90% — threshold
+    val zone5Minutes: Int,   // ≥ 90%   — maximum
+)
+
 data class HealthConnectSession(
     val externalId: String,
     val startTime: Instant,
@@ -58,6 +71,8 @@ data class HealthConnectSession(
     val title: String?,
     val notes: String?,
     val durationMinutes: Int,
+    val hrZones: HrZones?,
+    val activeCaloriesKcal: Double?,
 )
 
 data class HealthConnectSleep(
@@ -122,7 +137,6 @@ class SamsungHealthReader(context: Context) {
         val filter = TimeRangeFilter.between(since, Instant.now())
         val samples = mutableMapOf<Instant, HealthConnectSample>()
 
-        // Heart rate
         runCatching {
             c.readRecords(ReadRecordsRequest(HeartRateRecord::class, filter)).records
                 .flatMap { it.samples }
@@ -133,7 +147,6 @@ class SamsungHealthReader(context: Context) {
                 }
         }.onFailure { Log.w(TAG, "HR read failed: ${it.message}") }
 
-        // SpO2
         runCatching {
             c.readRecords(ReadRecordsRequest(OxygenSaturationRecord::class, filter)).records
                 .forEach { r ->
@@ -143,7 +156,6 @@ class SamsungHealthReader(context: Context) {
                 }
         }.onFailure { Log.w(TAG, "SpO2 read failed: ${it.message}") }
 
-        // Steps
         runCatching {
             c.readRecords(ReadRecordsRequest(StepsRecord::class, filter)).records
                 .forEach { r ->
@@ -153,7 +165,6 @@ class SamsungHealthReader(context: Context) {
                 }
         }.onFailure { Log.w(TAG, "Steps read failed: ${it.message}") }
 
-        // Calories
         runCatching {
             c.readRecords(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, filter)).records
                 .forEach { r ->
@@ -163,7 +174,6 @@ class SamsungHealthReader(context: Context) {
                 }
         }.onFailure { Log.w(TAG, "Calories read failed: ${it.message}") }
 
-        // Active Calories
         runCatching {
             c.readRecords(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, filter)).records
                 .forEach { r ->
@@ -173,7 +183,6 @@ class SamsungHealthReader(context: Context) {
                 }
         }.onFailure { Log.w(TAG, "Active calories read failed: ${it.message}") }
 
-        // Distance
         runCatching {
             c.readRecords(ReadRecordsRequest(DistanceRecord::class, filter)).records
                 .forEach { r ->
@@ -183,7 +192,6 @@ class SamsungHealthReader(context: Context) {
                 }
         }.onFailure { Log.w(TAG, "Distance read failed: ${it.message}") }
 
-        // Floors
         runCatching {
             c.readRecords(ReadRecordsRequest(FloorsClimbedRecord::class, filter)).records
                 .forEach { r ->
@@ -271,7 +279,7 @@ class SamsungHealthReader(context: Context) {
         return points.values.toList().sortedBy { it.recordedAt }
     }
 
-    /** Read exercise sessions from [since] to now. */
+    /** Read exercise sessions from [since] to now, including HR zone analysis. */
     suspend fun readSessions(since: Instant): List<HealthConnectSession> {
         val c = client ?: return emptyList()
         val filter = TimeRangeFilter.between(since, Instant.now())
@@ -279,6 +287,28 @@ class SamsungHealthReader(context: Context) {
             c.readRecords(ReadRecordsRequest(ExerciseSessionRecord::class, filter)).records
                 .map { r ->
                     val durationMin = ((r.endTime.epochSecond - r.startTime.epochSecond) / 60).toInt()
+                    val sessionFilter = TimeRangeFilter.between(r.startTime, r.endTime)
+
+                    // Read HR samples within the session window
+                    val hrZones = runCatching {
+                        val hrSamples = c.readRecords(ReadRecordsRequest(HeartRateRecord::class, sessionFilter))
+                            .records.flatMap { it.samples }.sortedBy { it.time }
+                        computeHrZones(hrSamples, r.startTime, r.endTime)
+                    }.getOrElse {
+                        Log.w(TAG, "Session HR read failed: ${it.message}")
+                        null
+                    }
+
+                    // Read active calories within the session window
+                    val activeCalories = runCatching {
+                        c.readRecords(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, sessionFilter))
+                            .records.sumOf { it.energy.inKilocalories }
+                            .takeIf { it > 0 }
+                    }.getOrElse {
+                        Log.w(TAG, "Session calories read failed: ${it.message}")
+                        null
+                    }
+
                     HealthConnectSession(
                         externalId = "hc_${r.metadata.id}",
                         startTime = r.startTime,
@@ -287,6 +317,8 @@ class SamsungHealthReader(context: Context) {
                         title = r.title,
                         notes = r.notes,
                         durationMinutes = durationMin,
+                        hrZones = hrZones,
+                        activeCaloriesKcal = activeCalories,
                     )
                 }
         }.getOrElse {
@@ -311,14 +343,13 @@ class SamsungHealthReader(context: Context) {
                     r.stages.forEach { stage ->
                         val mins = ((stage.endTime.epochSecond - stage.startTime.epochSecond) / 60).toInt()
                         when (stage.stage) {
-                            SleepSessionRecord.STAGE_TYPE_DEEP  -> deep += mins
-                            SleepSessionRecord.STAGE_TYPE_LIGHT -> light += mins
-                            SleepSessionRecord.STAGE_TYPE_REM   -> rem += mins
-                            SleepSessionRecord.STAGE_TYPE_AWAKE -> awake += mins
+                            SleepSessionRecord.STAGE_TYPE_DEEP     -> deep += mins
+                            SleepSessionRecord.STAGE_TYPE_LIGHT    -> light += mins
+                            SleepSessionRecord.STAGE_TYPE_REM      -> rem += mins
+                            SleepSessionRecord.STAGE_TYPE_AWAKE    -> awake += mins
                             SleepSessionRecord.STAGE_TYPE_SLEEPING -> totalSleep += mins
                         }
                     }
-                    // If no explicit "sleeping" stage, sum deep+light+rem as total sleep
                     if (totalSleep == 0) totalSleep = deep + light + rem
                     HealthConnectSleep(
                         externalId = "hc_sleep_${r.metadata.id}",
@@ -337,6 +368,56 @@ class SamsungHealthReader(context: Context) {
             Log.w(TAG, "Sleep read failed: ${it.message}")
             emptyList()
         }
+    }
+
+    /**
+     * Compute time-weighted HR zones from a sorted list of HR samples.
+     * Each sample's HR applies from the previous sample's time to its own time.
+     * Zones are based on DEFAULT_MAX_HR (190 bpm):
+     *   Zone 1: <60%  — recovery
+     *   Zone 2: 60-70% — fat burn
+     *   Zone 3: 70-80% — aerobic
+     *   Zone 4: 80-90% — threshold
+     *   Zone 5: ≥90%  — maximum
+     */
+    private fun computeHrZones(
+        samples: List<HeartRateRecord.Sample>,
+        sessionStart: Instant,
+        sessionEnd: Instant,
+    ): HrZones? {
+        if (samples.isEmpty()) return null
+
+        val zoneSeconds = LongArray(6)
+        var prevTime = sessionStart
+
+        for (sample in samples) {
+            val secs = (sample.time.epochSecond - prevTime.epochSecond).coerceAtLeast(0)
+            val zone = hrZone(sample.beatsPerMinute.toDouble())
+            zoneSeconds[zone] += secs
+            prevTime = sample.time
+        }
+        // Last sample's HR applies until session end
+        val lastSecs = (sessionEnd.epochSecond - prevTime.epochSecond).coerceAtLeast(0)
+        zoneSeconds[hrZone(samples.last().beatsPerMinute.toDouble())] += lastSecs
+
+        val hrValues = samples.map { it.beatsPerMinute.toDouble() }
+        return HrZones(
+            avgHrBpm = hrValues.average().takeIf { hrValues.isNotEmpty() },
+            maxHrBpm = hrValues.maxOrNull(),
+            zone1Minutes = (zoneSeconds[1] / 60).toInt(),
+            zone2Minutes = (zoneSeconds[2] / 60).toInt(),
+            zone3Minutes = (zoneSeconds[3] / 60).toInt(),
+            zone4Minutes = (zoneSeconds[4] / 60).toInt(),
+            zone5Minutes = (zoneSeconds[5] / 60).toInt(),
+        )
+    }
+
+    private fun hrZone(bpm: Double): Int = when {
+        bpm < DEFAULT_MAX_HR * 0.60 -> 1
+        bpm < DEFAULT_MAX_HR * 0.70 -> 2
+        bpm < DEFAULT_MAX_HR * 0.80 -> 3
+        bpm < DEFAULT_MAX_HR * 0.90 -> 4
+        else                         -> 5
     }
 
     private fun bucket10min(t: Instant): Instant {

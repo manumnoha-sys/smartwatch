@@ -25,6 +25,16 @@ class Workout(Base):
     duration_minutes: Mapped[Optional[int]] = mapped_column(Integer)
     notes: Mapped[Optional[str]] = mapped_column(Text)
 
+    # HR zone analysis (computed from Health Connect samples during the session)
+    avg_hr_bpm: Mapped[Optional[float]] = mapped_column(Float)
+    max_hr_bpm: Mapped[Optional[float]] = mapped_column(Float)
+    calories_active_kcal: Mapped[Optional[float]] = mapped_column(Float)
+    zone1_minutes: Mapped[Optional[int]] = mapped_column(Integer)  # <60% max HR — recovery
+    zone2_minutes: Mapped[Optional[int]] = mapped_column(Integer)  # 60-70% — fat burn
+    zone3_minutes: Mapped[Optional[int]] = mapped_column(Integer)  # 70-80% — aerobic
+    zone4_minutes: Mapped[Optional[int]] = mapped_column(Integer)  # 80-90% — threshold
+    zone5_minutes: Mapped[Optional[int]] = mapped_column(Integer)  # ≥90%   — maximum
+
     __table_args__ = (
         Index("ix_workout_performed", "performed_at"),
     )

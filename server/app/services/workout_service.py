@@ -15,10 +15,17 @@ async def ingest_workouts(db: AsyncSession, payload: WorkoutIngestRequest) -> di
             "score_by_type": stmt.excluded.score_by_type,
             "rx": stmt.excluded.rx,
             "notes": stmt.excluded.notes,
+            "avg_hr_bpm": stmt.excluded.avg_hr_bpm,
+            "max_hr_bpm": stmt.excluded.max_hr_bpm,
+            "calories_active_kcal": stmt.excluded.calories_active_kcal,
+            "zone1_minutes": stmt.excluded.zone1_minutes,
+            "zone2_minutes": stmt.excluded.zone2_minutes,
+            "zone3_minutes": stmt.excluded.zone3_minutes,
+            "zone4_minutes": stmt.excluded.zone4_minutes,
+            "zone5_minutes": stmt.excluded.zone5_minutes,
             "updated_at": stmt.excluded.updated_at,
         },
     )
     result = await db.execute(stmt)
     await db.commit()
-    # rowcount = inserts + updates; we can't distinguish without a second query
     return {"accepted": len(rows), "updated": result.rowcount, "duplicate_skipped": 0}
