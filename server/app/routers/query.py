@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import Float, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import require_api_key
@@ -164,7 +164,7 @@ async def get_daily_summary(
             func.max(GlucoseReading.glucose_mgdl),
             func.count().filter(
                 GlucoseReading.glucose_mgdl.between(70, 180)
-            ).cast(float) / func.nullif(func.count(), 0) * 100,
+            ).cast(Float) / func.nullif(func.count(), 0) * 100,
         ).where(
             GlucoseReading.recorded_at >= day_start,
             GlucoseReading.recorded_at < day_end,
