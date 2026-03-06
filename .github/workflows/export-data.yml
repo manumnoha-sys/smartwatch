@@ -20,12 +20,11 @@ jobs:
           HEALTH_API_KEY: ${{ secrets.HEALTH_API_KEY }}
         run: python3 dashboard/export_data.py
 
-      - name: Commit and push
-        run: |
-          git config user.name  "health-export-bot"
-          git config user.email "bot@health-dashboard"
-          git add dashboard/data/
-          git diff --staged --quiet && echo "No changes." || (
-            git commit -m "data: export $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            git push
-          )
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dashboard
+          publish_branch: gh-pages
+          keep_files: false
+          commit_message: "data: export ${{ github.run_id }}"
