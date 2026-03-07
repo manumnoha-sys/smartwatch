@@ -322,14 +322,6 @@ function teslaStatCard(label, value, color = 'text-slate-100') {
   </div>`;
 }
 
-function teslaStatCardLg(label, value, sub, color = 'text-slate-100') {
-  return `<div class="bg-slate-800/60 rounded-lg p-4">
-    <div class="text-2xl font-bold ${color}">${value ?? '—'}</div>
-    ${sub ? `<div class="text-xs text-slate-600 mt-0.5">${sub}</div>` : ''}
-    <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">${label}</div>
-  </div>`;
-}
-
 function chargingColor(state) {
   if (!state) return 'text-slate-400';
   const s = state.toLowerCase();
@@ -342,189 +334,91 @@ function chargingColor(state) {
 function batteryBar(pct) {
   if (pct == null) return '';
   const color = pct > 50 ? '#22c55e' : pct > 20 ? '#eab308' : '#ef4444';
-  return `<div class="w-full bg-slate-800 rounded-full h-3 mt-2">
-    <div class="h-3 rounded-full transition-all" style="width:${pct}%;background:${color}"></div>
+  return `<div class="w-full bg-slate-800 rounded-full h-2 mt-2">
+    <div class="h-2 rounded-full transition-all" style="width:${pct}%;background:${color}"></div>
   </div>`;
 }
 
-function tempDisplay(c) {
-  if (c == null) return null;
-  const f = (c * 9/5 + 32).toFixed(1);
-  return `${c.toFixed(1)}°C <span class="text-slate-600 text-sm font-normal">${f}°F</span>`;
-}
-
-function renderTesla(t, history) {
+function renderTesla(t) {
   if (!t) return '<p class="text-slate-600 text-sm">No Tesla data available — poller not yet set up.</p>';
-
   const chgState = t.charging_state ?? 'Unknown';
   const chgClr   = chargingColor(chgState);
-  const doors    = ['df','dr','pf','pr','ft','rt'].some(k => t[k] > 0) ? '⚠ Open' : 'Closed';
-  const windows  = ['fd_window','rd_window','fp_window','rp_window'].some(k => t[k] > 0) ? '⚠ Open' : 'Closed';
-  const tpms     = [t.tpms_fl, t.tpms_fr, t.tpms_rl, t.tpms_rr];
-  const tpmsStr  = tpms.every(p => p == null) ? '—' : tpms.map(p => p != null ? p.toFixed(2) : '—').join(' / ');
+  const doors = ['df','dr','pf','pr','ft','rt'].some(k => t[k] > 0) ? '⚠ Open' : 'Closed';
+  const windows = ['fd_window','rd_window','fp_window','rp_window'].some(k => t[k] > 0) ? '⚠ Open' : 'Closed';
+  const tpms = [t.tpms_fl, t.tpms_fr, t.tpms_rl, t.tpms_rr];
+  const tpmsStr = tpms.every(p => p == null) ? '—' : tpms.map(p => p != null ? p.toFixed(2) : '—').join(' / ');
 
-  const rangeMi  = t.battery_range_miles != null ? Math.round(t.battery_range_miles) : null;
-  const estMi    = t.est_battery_range_miles != null ? Math.round(t.est_battery_range_miles) : null;
-
-  // Miles driven today from odometer delta across history
-  let milesDriven = null;
-  if (history && history.length >= 2) {
-    const odoms = history.map(h => h.odometer_miles).filter(o => o != null);
-    if (odoms.length >= 2) {
-      const delta = Math.max(...odoms) - Math.min(...odoms);
-      if (delta > 0) milesDriven = delta;
-    }
-  }
-  const milesDrivenStr = milesDriven != null
-    ? `${milesDriven.toFixed(1)} mi <span class="text-slate-600 text-sm font-normal">${(milesDriven * 1.609).toFixed(1)} km</span>`
-    : null;
+  const rangeKm = t.battery_range_miles != null ? Math.round(t.battery_range_miles * 1.609) : null;
 
   let chargingExtra = '';
   if (chgState === 'Charging') {
     chargingExtra = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
       ${teslaStatCard('Charger Power', t.charger_power_kw != null ? t.charger_power_kw + ' kW' : null, 'text-green-400')}
-      ${teslaStatCard('Charge Rate', t.charge_rate_mph != null ? t.charge_rate_mph.toFixed(1) + ' mph' : null)}
-      ${teslaStatCard('Energy Added', t.charge_energy_added_kwh != null ? t.charge_energy_added_kwh.toFixed(2) + ' kWh' : null)}
+      ${teslaStatCard('Rate', t.charge_rate_mph != null ? t.charge_rate_mph.toFixed(1) + ' mph' : null)}
+      ${teslaStatCard('Added', t.charge_energy_added_kwh != null ? t.charge_energy_added_kwh.toFixed(2) + ' kWh' : null)}
       ${teslaStatCard('Time to Full', t.minutes_to_full_charge != null ? fmt(t.minutes_to_full_charge) : null, 'text-blue-400')}
     </div>`;
   }
 
-  // 24h range chart
-  const hasHistory = history && history.length > 1;
-  const rangeChartHtml = hasHistory
-    ? `<div class="mt-5">
-        <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Range — Last 24h</p>
-        <canvas id="tesla-range-chart" style="max-height:160px"></canvas>
-       </div>`
-    : '';
-
   return `
-  <!-- Key metrics row -->
-  <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-    <!-- Battery (spans 1 col, large) -->
-    <div class="bg-slate-800/60 rounded-lg p-4 col-span-1">
-      <div class="flex items-end gap-1.5 mb-1">
-        <span class="text-3xl font-bold text-white">${t.battery_level ?? '—'}</span>
-        <span class="text-lg text-slate-400 mb-0.5">%</span>
+    <!-- Battery / Charge -->
+    <div>
+      <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Battery</p>
+      <div class="flex items-end gap-2 mb-1">
+        <span class="text-4xl font-bold text-white">${t.battery_level ?? '—'}<span class="text-xl text-slate-400">%</span></span>
+        <span class="text-sm ${chgClr} mb-1">${chgState}</span>
+        ${t.charge_limit_soc != null ? `<span class="text-xs text-slate-600 mb-1">limit ${t.charge_limit_soc}%</span>` : ''}
       </div>
-      <div class="text-xs text-slate-500 uppercase tracking-wider">Battery</div>
       ${batteryBar(t.battery_level)}
-      <div class="text-xs ${chgClr} mt-1.5">${chgState}${t.charge_limit_soc != null ? ` · limit ${t.charge_limit_soc}%` : ''}</div>
+      <div class="mt-3 text-sm text-slate-400">
+        Range: <span class="text-slate-200 font-medium">${rangeKm != null ? rangeKm + ' km' : '—'}</span>
+        <span class="text-slate-600 ml-1 text-xs">(est ${t.est_battery_range_miles != null ? Math.round(t.est_battery_range_miles * 1.609) + ' km' : '—'})</span>
+      </div>
+      ${chargingExtra}
     </div>
 
-    <!-- Range -->
-    <div class="bg-slate-800/60 rounded-lg p-4">
-      <div class="text-2xl font-bold text-emerald-400">${rangeMi != null ? rangeMi + ' mi' : '—'}</div>
-      <div class="text-xs text-slate-600 mt-0.5">est ${estMi != null ? estMi + ' mi' : '—'}</div>
-      <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Range</div>
-    </div>
-
-    <!-- Miles Driven -->
-    <div class="bg-slate-800/60 rounded-lg p-4">
-      <div class="text-2xl font-bold text-sky-400">${milesDrivenStr != null ? `<span>${milesDriven.toFixed(1)} mi</span>` : '—'}</div>
-      ${milesDriven != null ? `<div class="text-xs text-slate-600 mt-0.5">${(milesDriven * 1.609).toFixed(1)} km</div>` : ''}
-      <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Driven (24h)</div>
-    </div>
-
-    <!-- Inside Temp -->
-    <div class="bg-slate-800/60 rounded-lg p-4">
-      <div class="text-2xl font-bold text-orange-300">${t.inside_temp_c != null ? t.inside_temp_c.toFixed(1) + '°C' : '—'}</div>
-      ${t.inside_temp_c != null ? `<div class="text-xs text-slate-600 mt-0.5">${(t.inside_temp_c * 9/5 + 32).toFixed(1)}°F</div>` : ''}
-      <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Inside Temp</div>
-      ${t.is_climate_on ? '<div class="text-xs text-green-400 mt-1">Climate On</div>' : ''}
-    </div>
-
-    <!-- Outside Temp -->
-    <div class="bg-slate-800/60 rounded-lg p-4">
-      <div class="text-2xl font-bold text-blue-300">${t.outside_temp_c != null ? t.outside_temp_c.toFixed(1) + '°C' : '—'}</div>
-      ${t.outside_temp_c != null ? `<div class="text-xs text-slate-600 mt-0.5">${(t.outside_temp_c * 9/5 + 32).toFixed(1)}°F</div>` : ''}
-      <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Outside Temp</div>
+    <!-- Climate & State -->
+    <div>
+      <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Climate & State</p>
+      <div class="grid grid-cols-2 gap-3">
+        ${teslaStatCard('Inside', t.inside_temp_c != null ? t.inside_temp_c.toFixed(1) + ' °C' : null, 'text-orange-300')}
+        ${teslaStatCard('Outside', t.outside_temp_c != null ? t.outside_temp_c.toFixed(1) + ' °C' : null, 'text-blue-300')}
+        ${teslaStatCard('Climate', t.is_climate_on ? 'On' : 'Off', t.is_climate_on ? 'text-green-400' : 'text-slate-500')}
+        ${teslaStatCard('Preconditioning', t.is_preconditioning ? 'Yes' : 'No', t.is_preconditioning ? 'text-yellow-400' : 'text-slate-500')}
+      </div>
     </div>
 
   </div>
 
-  ${chargingExtra}
-
-  ${rangeChartHtml}
-
   <!-- Status row -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
-    ${teslaStatCard('Locked', t.locked != null ? (t.locked ? 'Locked' : '⚠ Unlocked') : null, t.locked ? 'text-green-400' : 'text-red-400')}
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+    ${teslaStatCard('Locked', t.locked != null ? (t.locked ? 'Yes' : '⚠ No') : null, t.locked ? 'text-green-400' : 'text-red-400')}
     ${teslaStatCard('Sentry', t.sentry_mode ? 'On' : 'Off', t.sentry_mode ? 'text-green-400' : 'text-slate-500')}
     ${teslaStatCard('Doors', doors, doors === 'Closed' ? 'text-slate-300' : 'text-red-400')}
     ${teslaStatCard('Windows', windows, windows === 'Closed' ? 'text-slate-300' : 'text-yellow-400')}
-    ${teslaStatCard('Odometer', t.odometer_miles != null ? Math.round(t.odometer_miles).toLocaleString() + ' mi' : null)}
-    ${teslaStatCard('Tires FL/FR/RL/RR (bar)', tpmsStr)}
+    ${teslaStatCard('Odometer', t.odometer_miles != null ? Math.round(t.odometer_miles * 1.609).toLocaleString() + ' km' : null)}
+    ${teslaStatCard('Tires (FL/FR/RL/RR bar)', tpmsStr)}
     ${teslaStatCard('Software', t.software_version)}
     ${teslaStatCard('Shift State', t.shift_state ?? 'Parked')}
   </div>`;
-}
-
-function initTeslaRangeChart(history) {
-  if (!history || history.length < 2) return;
-  const canvas = document.getElementById('tesla-range-chart');
-  if (!canvas) return;
-  const labels = history.map(h => new Date(h.recorded_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
-  const rangeMi = history.map(h => h.battery_range_miles != null ? Math.round(h.battery_range_miles) : null);
-  const battery = history.map(h => h.battery_level);
-  if (charts['tesla-range']) charts['tesla-range'].destroy();
-  charts['tesla-range'] = new Chart(canvas, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Range (mi)',
-          data: rangeMi,
-          borderColor: '#34d399',
-          backgroundColor: 'rgba(52,211,153,0.08)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 2,
-          yAxisID: 'y',
-        },
-        {
-          label: 'Battery %',
-          data: battery,
-          borderColor: '#60a5fa',
-          backgroundColor: 'transparent',
-          tension: 0.3,
-          pointRadius: 2,
-          borderDash: [4, 3],
-          yAxisID: 'y2',
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: { legend: { display: true, position: 'bottom', labels: { color: '#64748b', font: { size: 11 }, padding: 12, boxWidth: 12, boxHeight: 12 } } },
-      scales: {
-        x: { grid: { color: '#1e2235' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 8 } },
-        y: { grid: { color: '#1e2235' }, ticks: { color: '#34d399', font: { size: 10 } }, title: { display: true, text: 'Range (mi)', color: '#34d399', font: { size: 10 } } },
-        y2: { position: 'right', grid: { display: false }, ticks: { color: '#60a5fa', font: { size: 10 } }, title: { display: true, text: 'Battery %', color: '#60a5fa', font: { size: 10 } }, min: 0, max: 100 },
-      },
-    },
-  });
 }
 
 async function loadTesla() {
   const el = document.getElementById('tesla-content');
   const upd = document.getElementById('tesla-updated');
   try {
-    const [latest, history] = await Promise.all([
-      fetch('data/tesla/latest.json').then(r => r.ok ? r.json() : null),
-      fetch('data/tesla/history-24h.json').then(r => r.ok ? r.json() : []),
-    ]);
-    if (latest && latest.recorded_at) {
-      upd.textContent = 'as of ' + new Date(latest.recorded_at).toLocaleString();
+    const r = await fetch('data/tesla/latest.json');
+    if (!r.ok) throw new Error();
+    const t = await r.json();
+    if (t && t.recorded_at) {
+      upd.textContent = 'as of ' + new Date(t.recorded_at).toLocaleString();
     }
-    el.innerHTML = renderTesla(latest, history);
-    initTeslaRangeChart(history);
+    el.innerHTML = renderTesla(t);
   } catch {
-    el.innerHTML = renderTesla(null, null);
+    el.innerHTML = renderTesla(null);
   }
 }
 
