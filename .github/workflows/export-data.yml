@@ -30,4 +30,5 @@ jobs:
           publish_dir: ./dashboard
           publish_branch: gh-pages
           keep_files: false
+          force_orphan: true
           commit_message: "data: export ${{ github.run_id }}"
