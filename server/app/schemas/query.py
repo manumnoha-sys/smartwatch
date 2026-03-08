@@ -27,7 +27,7 @@ class DailySummary(BaseModel):
     avg_spo2_percent: Optional[float]
     min_spo2_percent: Optional[float]
     total_steps: Optional[int]
-    total_distance_meters: Optional[float]
+    total_distance_meters: Optional[float] = None
     total_calories_kcal: Optional[float]
     avg_glucose_mgdl: Optional[float]
     min_glucose_mgdl: Optional[float]

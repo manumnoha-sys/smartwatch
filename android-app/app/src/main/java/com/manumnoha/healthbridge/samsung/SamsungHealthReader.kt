@@ -291,19 +291,30 @@ class SamsungHealthReader(context: Context) {
 
                     // Read HR samples within the session window
                     val hrZones = runCatching {
-                        val hrSamples = c.readRecords(ReadRecordsRequest(HeartRateRecord::class, sessionFilter))
-                            .records.flatMap { it.samples }.sortedBy { it.time }
+                        val hrRecords = c.readRecords(ReadRecordsRequest(HeartRateRecord::class, sessionFilter)).records
+                        val hrSamples = hrRecords.flatMap { it.samples }.sortedBy { it.time }
+                        Log.i(TAG, "Session ${r.startTime}–${r.endTime} (${durationMin}min): " +
+                            "${hrRecords.size} HR records, ${hrSamples.size} samples")
                         computeHrZones(hrSamples, r.startTime, r.endTime)
                     }.getOrElse {
                         Log.w(TAG, "Session HR read failed: ${it.message}")
                         null
                     }
 
-                    // Read active calories within the session window
+                    // Read active calories within the session window.
+                    // Samsung Health writes TotalCaloriesBurnedRecord for workouts, not ActiveCaloriesBurnedRecord.
                     val activeCalories = runCatching {
-                        c.readRecords(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, sessionFilter))
-                            .records.sumOf { it.energy.inKilocalories }
-                            .takeIf { it > 0 }
+                        val activeRecs = c.readRecords(ReadRecordsRequest(ActiveCaloriesBurnedRecord::class, sessionFilter)).records
+                        val totalRecs = c.readRecords(ReadRecordsRequest(TotalCaloriesBurnedRecord::class, sessionFilter)).records
+                        Log.i(TAG, "Session ${r.startTime}: ${activeRecs.size} active cal records, ${totalRecs.size} total cal records")
+                        val activeCal = activeRecs.sumOf { it.energy.inKilocalories }
+                        val totalCal = totalRecs.sumOf { it.energy.inKilocalories }
+                        // Prefer active calories; fall back to total calories
+                        when {
+                            activeCal > 0 -> activeCal
+                            totalCal > 0  -> totalCal
+                            else          -> null
+                        }
                     }.getOrElse {
                         Log.w(TAG, "Session calories read failed: ${it.message}")
                         null
