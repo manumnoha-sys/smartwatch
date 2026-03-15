@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Health Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    body { background: #0f1117; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+    .card { background: #1a1d27; border: 1px solid #2d3148; border-radius: 12px; }
+    .stat-value { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .stat-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: #64748b; margin-top: 4px; }
+    canvas { max-height: 220px; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
+  </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-2xl font-bold text-white">Health Dashboard</h1>
+      <p id="last-updated" class="text-sm text-slate-500 mt-1">Loading…</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="status-dot" class="w-2 h-2 rounded-full bg-slate-600"></span>
+      <select id="tz-select" class="bg-slate-800 border border-slate-700 text-sm rounded px-2 py-1 text-slate-300">
+        <option value="America/New_York">New York</option>
+        <option value="America/Chicago">Chicago</option>
+        <option value="America/Denver">Denver</option>
+        <option value="America/Los_Angeles" selected>Los Angeles (PST)</option>
+        <option value="UTC">UTC</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Snapshot row -->
+  <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+    <div class="card p-4"><div class="stat-value text-rose-400" id="snap-hr">—</div><div class="stat-label">Heart Rate <span class="text-slate-600">bpm</span></div></div>
+    <div class="card p-4"><div class="stat-value text-blue-400" id="snap-spo2">—</div><div class="stat-label">SpO₂ <span class="text-slate-600">%</span></div></div>
+    <div class="card p-4"><div class="stat-value text-green-400" id="snap-steps">—</div><div class="stat-label">Steps today</div></div>
+    <div class="card p-4"><div class="stat-value text-yellow-400" id="snap-dist">—</div><div class="stat-label">Distance <span class="text-slate-600">m</span></div></div>
+    <div class="card p-4"><div class="stat-value text-purple-400" id="snap-sleep">—</div><div class="stat-label">Sleep last night</div></div>
+    <div class="card p-4"><div class="stat-value text-orange-400" id="snap-workout">—</div><div class="stat-label">Last workout</div></div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <div class="card p-5">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Heart Rate — Today</h2>
+      <canvas id="chart-hr"></canvas>
+    </div>
+    <div class="card p-5">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Steps — Last 7 Days</h2>
+      <canvas id="chart-steps"></canvas>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <div class="card p-5">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Sleep Last Night</h2>
+      <canvas id="chart-sleep-donut"></canvas>
+    </div>
+    <div class="card p-5">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Distance — Last 7 Days <span class="text-slate-600 font-normal">(m)</span></h2>
+      <canvas id="chart-dist"></canvas>
+    </div>
+  </div>
+
+  <!-- Workout Detail -->
+  <div class="card p-5 mb-6">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-5">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Workout Detail</h2>
+      <input type="date" id="workout-date" max=""
+        class="bg-slate-800 border border-slate-700 text-sm rounded px-3 py-1.5 text-slate-300 focus:outline-none focus:border-slate-500" />
+    </div>
+    <div id="workout-detail"></div>
+  </div>
+
+  <!-- Tesla -->
+  <div class="card p-5 mb-6" id="tesla-section">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Tesla</h2>
+      <span id="tesla-updated" class="text-xs text-slate-600"></span>
+    </div>
+    <div id="tesla-content"><p class="text-slate-600 text-sm">Loading…</p></div>
+  </div>
+
+  <!-- Sleep history table -->
+  <div class="card p-5 mb-6">
+    <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Sleep History</h2>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-slate-500 border-b border-slate-800">
+            <th class="text-left pb-2 font-medium">Date</th>
+            <th class="text-right pb-2 font-medium">Bedtime</th>
+            <th class="text-right pb-2 font-medium">Duration</th>
+            <th class="text-right pb-2 font-medium">Total Sleep</th>
+            <th class="text-right pb-2 font-medium">Deep</th>
+            <th class="text-right pb-2 font-medium">REM</th>
+            <th class="text-right pb-2 font-medium">Awake</th>
+          </tr>
+        </thead>
+        <tbody id="sleep-table"></tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+function fmt(mins) {
+  if (mins == null) return '—';
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+function fmtTime(iso, tz) {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: tz });
+}
+function fmtDate(iso, tz) {
+  return new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz });
+}
+function todayStr() { return new Date().toISOString().slice(0, 10); }
+
+const chartDefaults = {
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { grid: { color: '#1e2235' }, ticks: { color: '#475569', font: { size: 11 } } },
+    y: { grid: { color: '#1e2235' }, ticks: { color: '#475569', font: { size: 11 } } },
+  },
+};
+let charts = {};
+function makeChart(id, type, data, opts = {}) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), {
+    type, data,
+    options: { responsive: true, maintainAspectRatio: true, ...chartDefaults, ...opts }
+  });
+}
+
+// HR Zone config
+const ZONES = [
+  { label: 'Zone 1', sub: '<60% — Recovery',    color: '#60a5fa' },
+  { label: 'Zone 2', sub: '60–70% — Fat burn',  color: '#34d399' },
+  { label: 'Zone 3', sub: '70–80% — Aerobic',   color: '#fbbf24' },
+  { label: 'Zone 4', sub: '80–90% — Threshold', color: '#f97316' },
+  { label: 'Zone 5', sub: '≥90% — Max effort',  color: '#ef4444' },
+];
+
+function renderWorkout(w, idx, tz) {
+  const canvasId = `zone-chart-${idx}`;
+  const mins = [w.zone1_minutes, w.zone2_minutes, w.zone3_minutes, w.zone4_minutes, w.zone5_minutes];
+  const hasZones = mins.some(m => m != null && m > 0);
+  const total = mins.reduce((a, b) => a + (b || 0), 0);
+
+  const zoneRows = hasZones
+    ? ZONES.map((z, i) => {
+        const m = mins[i] || 0;
+        const pct = total > 0 ? ((m / total) * 100).toFixed(0) : 0;
+        return `<div class="flex items-center gap-3 text-xs py-1">
+          <div class="w-2 h-2 rounded-full flex-shrink-0" style="background:${z.color}"></div>
+          <span class="text-slate-400 w-40">${z.label} <span class="text-slate-600 text-xs">${z.sub}</span></span>
+          <div class="flex-1 bg-slate-800 rounded-full h-1.5">
+            <div class="h-1.5 rounded-full transition-all" style="width:${pct}%;background:${z.color}"></div>
+          </div>
+          <span class="text-slate-200 w-12 text-right font-medium">${fmt(m)}</span>
+          <span class="text-slate-600 w-8 text-right">${pct}%</span>
+        </div>`;
+      }).join('')
+    : `<p class="text-slate-600 text-xs py-2">HR zone data not yet available — will appear after next sync with updated app.</p>`;
+
+  return `
+    <div class="mb-6">
+      <div class="flex items-start justify-between mb-3">
+        <div>
+          <span class="text-base font-semibold text-slate-100">${w.wod_name ?? 'Workout'}</span>
+          <span class="ml-2 text-slate-500 text-sm">${fmtTime(w.performed_at, tz)}</span>
+        </div>
+        ${w.result ? `<span class="text-orange-400 font-semibold text-sm bg-orange-400/10 px-2 py-0.5 rounded">${w.result}</span>` : ''}
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div class="bg-slate-800/60 rounded-lg p-3">
+          <div class="text-xl font-bold text-slate-100">${fmt(w.duration_minutes)}</div>
+          <div class="text-xs text-slate-500 mt-0.5">Duration</div>
+        </div>
+        <div class="bg-slate-800/60 rounded-lg p-3">
+          <div class="text-xl font-bold ${w.avg_hr_bpm != null ? 'text-rose-400' : 'text-slate-600'}">${w.avg_hr_bpm != null ? Math.round(w.avg_hr_bpm) + ' bpm' : '—'}</div>
+          <div class="text-xs text-slate-500 mt-0.5">Avg Heart Rate</div>
+        </div>
+        <div class="bg-slate-800/60 rounded-lg p-3">
+          <div class="text-xl font-bold ${w.max_hr_bpm != null ? 'text-rose-300' : 'text-slate-600'}">${w.max_hr_bpm != null ? Math.round(w.max_hr_bpm) + ' bpm' : '—'}</div>
+          <div class="text-xs text-slate-500 mt-0.5">Max Heart Rate</div>
+        </div>
+        <div class="bg-slate-800/60 rounded-lg p-3">
+          <div class="text-xl font-bold ${w.calories_active_kcal != null ? 'text-yellow-400' : 'text-slate-600'}">${w.calories_active_kcal != null ? Math.round(w.calories_active_kcal) + ' kcal' : '—'}</div>
+          <div class="text-xs text-slate-500 mt-0.5">Active Calories</div>
+        </div>
+      </div>
+
+      ${hasZones ? `<canvas id="${canvasId}" style="max-height:52px" class="mb-3"></canvas>` : ''}
+      <div class="space-y-0.5">${zoneRows}</div>
+    </div>`;
+}
+
+function initZoneChart(canvasId, workout) {
+  const mins = [
+    workout.zone1_minutes || 0, workout.zone2_minutes || 0, workout.zone3_minutes || 0,
+    workout.zone4_minutes || 0, workout.zone5_minutes || 0,
+  ];
+  if (mins.every(m => m === 0)) return;
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: ['HR Zones'],
+      datasets: ZONES.map((z, i) => ({
+        label: z.label,
+        data: [mins[i]],
+        backgroundColor: z.color,
+        borderWidth: 0,
+      })),
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { color: '#64748b', font: { size: 10 }, padding: 10, boxWidth: 10, boxHeight: 10 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.raw)}` } },
+      },
+      scales: {
+        x: { stacked: true, display: false },
+        y: { stacked: true, display: false },
+      },
+    },
+  });
+}
+
+async function loadWorkoutDetail(dateStr) {
+  const el = document.getElementById('workout-detail');
+  const tz = document.getElementById('tz-select').value;
+  el.innerHTML = '<p class="text-slate-500 text-sm">Loading…</p>';
+  try {
+    const r = await fetch(`data/daily/${dateStr}.json`);
+    if (!r.ok) throw new Error();
+    const day = await r.json();
+    const workouts = day.workouts || [];
+    if (workouts.length === 0) {
+      el.innerHTML = '<p class="text-slate-600 text-sm">No workouts recorded on this date.</p>';
+      return;
+    }
+    el.innerHTML = workouts.map((w, i) => renderWorkout(w, i, tz)).join(
+      '<div class="border-t border-slate-800 my-4"></div>'
+    );
+    workouts.forEach((w, i) => initZoneChart(`zone-chart-${i}`, w));
+  } catch {
+    el.innerHTML = '<p class="text-slate-600 text-sm">No data for this date — data is kept for the last 30 days.</p>';
+  }
+}
+
+async function load() {
+  const tz = document.getElementById('tz-select').value;
+  try {
+    const [snap, sleep7, daily7, meta] = await Promise.all([
+      fetch('data/snapshot.json').then(r => r.json()),
+      fetch('data/sleep.json').then(r => r.json()),
+      fetch('data/daily-7.json').then(r => r.json()),
+      fetch('data/meta.json').then(r => r.json()),
+    ]);
+    const today = daily7[daily7.length - 1];
+
+    document.getElementById('snap-hr').textContent    = snap.latest_heart_rate_bpm ? Math.round(snap.latest_heart_rate_bpm) : '—';
+    document.getElementById('snap-spo2').textContent  = snap.latest_spo2_percent ? snap.latest_spo2_percent.toFixed(1) : '—';
+    document.getElementById('snap-steps').textContent = (today?.total_steps ?? 0).toLocaleString();
+    document.getElementById('snap-dist').textContent  = today?.total_distance_meters != null ? Math.round(today.total_distance_meters).toLocaleString() : '—';
+    document.getElementById('snap-workout').textContent = snap.last_workout_result ?? '—';
+    document.getElementById('snap-sleep').textContent = sleep7[0] ? fmt(sleep7[0].total_sleep_minutes) : '—';
+    document.getElementById('status-dot').className   = 'w-2 h-2 rounded-full bg-green-500';
+    document.getElementById('last-updated').textContent = 'Data as of ' + new Date(meta.updated_at).toLocaleString();
+
+    makeChart('chart-hr', 'bar', {
+      labels: ['Min', 'Avg', 'Max'],
+      datasets: [{ data: [today?.min_heart_rate_bpm, today?.avg_heart_rate_bpm, today?.max_heart_rate_bpm], backgroundColor: ['#3b82f6', '#f43f5e', '#ef4444'], borderRadius: 6 }]
+    });
+    const dayLabels = daily7.map(d => new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
+    makeChart('chart-steps', 'bar', { labels: dayLabels, datasets: [{ data: daily7.map(d => d.total_steps ?? 0), backgroundColor: '#22c55e', borderRadius: 6 }] });
+    makeChart('chart-dist',  'bar', { labels: dayLabels, datasets: [{ data: daily7.map(d => Math.round(d.total_distance_meters ?? 0)), backgroundColor: '#eab308', borderRadius: 6 }] });
+
+    if (sleep7[0]) {
+      const s = sleep7[0];
+      makeChart('chart-sleep-donut', 'doughnut', {
+        labels: ['Deep', 'Light', 'REM', 'Awake'],
+        datasets: [{ data: [s.deep_sleep_minutes ?? 0, s.light_sleep_minutes ?? 0, s.rem_sleep_minutes ?? 0, s.awake_minutes ?? 0], backgroundColor: ['#3b82f6', '#60a5fa', '#a78bfa', '#f87171'], borderColor: '#1a1d27', borderWidth: 3 }]
+      }, { scales: {}, plugins: { legend: { display: true, position: 'right', labels: { color: '#94a3b8', font: { size: 12 }, padding: 12 } } }, cutout: '65%' });
+    }
+
+    document.getElementById('sleep-table').innerHTML = sleep7.slice(0, 10).map(s => `
+      <tr class="border-b border-slate-800/50 hover:bg-slate-800/30">
+        <td class="py-2 text-slate-300">${fmtDate(s.start_time, tz)}</td>
+        <td class="py-2 text-right text-slate-400">${fmtTime(s.start_time, tz)}</td>
+        <td class="py-2 text-right text-slate-300 font-medium">${fmt(s.duration_minutes)}</td>
+        <td class="py-2 text-right text-blue-400">${fmt(s.total_sleep_minutes)}</td>
+        <td class="py-2 text-right text-blue-300">${fmt(s.deep_sleep_minutes)}</td>
+        <td class="py-2 text-right text-purple-400">${fmt(s.rem_sleep_minutes)}</td>
+        <td class="py-2 text-right text-red-400">${fmt(s.awake_minutes)}</td>
+      </tr>`).join('');
+  } catch (e) {
+    document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-red-500';
+    document.getElementById('last-updated').textContent = 'Error loading data';
+    console.error(e);
+  }
+}
+
+// ── Tesla ────────────────────────────────────────────────────────────────────
+
+function teslaStatCard(label, value, color = 'text-slate-100') {
+  return `<div class="bg-slate-800/60 rounded-lg p-3">
+    <div class="text-xl font-bold ${color}">${value ?? '—'}</div>
+    <div class="text-xs text-slate-500 mt-0.5">${label}</div>
+  </div>`;
+}
+
+function teslaStatCardLg(label, value, sub, color = 'text-slate-100') {
+  return `<div class="bg-slate-800/60 rounded-lg p-4">
+    <div class="text-2xl font-bold ${color}">${value ?? '—'}</div>
+    ${sub ? `<div class="text-xs text-slate-600 mt-0.5">${sub}</div>` : ''}
+    <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">${label}</div>
+  </div>`;
+}
+
+function chargingColor(state) {
+  if (!state) return 'text-slate-400';
+  const s = state.toLowerCase();
+  if (s === 'charging') return 'text-green-400';
+  if (s === 'complete') return 'text-blue-400';
+  if (s === 'disconnected') return 'text-slate-400';
+  return 'text-yellow-400';
+}
+
+function batteryBar(pct) {
+  if (pct == null) return '';
+  const color = pct > 50 ? '#22c55e' : pct > 20 ? '#eab308' : '#ef4444';
+  return `<div class="w-full bg-slate-800 rounded-full h-3 mt-2">
+    <div class="h-3 rounded-full transition-all" style="width:${pct}%;background:${color}"></div>
+  </div>`;
+}
+
+function tempDisplay(c) {
+  if (c == null) return null;
+  const f = (c * 9/5 + 32).toFixed(1);
+  return `${c.toFixed(1)}°C <span class="text-slate-600 text-sm font-normal">${f}°F</span>`;
+}
+
+function renderTesla(t, history) {
+  if (!t) return '<p class="text-slate-600 text-sm">No Tesla data available — poller not yet set up.</p>';
+
+  const chgState = t.charging_state ?? 'Unknown';
+  const chgClr   = chargingColor(chgState);
+  const doors    = ['df','dr','pf','pr','ft','rt'].some(k => t[k] > 0) ? '⚠ Open' : 'Closed';
+  const windows  = ['fd_window','rd_window','fp_window','rp_window'].some(k => t[k] > 0) ? '⚠ Open' : 'Closed';
+  const tpms     = [t.tpms_fl, t.tpms_fr, t.tpms_rl, t.tpms_rr];
+  const tpmsStr  = tpms.every(p => p == null) ? '—' : tpms.map(p => p != null ? p.toFixed(2) : '—').join(' / ');
+
+  const rangeMi  = t.battery_range_miles != null ? Math.round(t.battery_range_miles) : null;
+  const estMi    = t.est_battery_range_miles != null ? Math.round(t.est_battery_range_miles) : null;
+
+  // Miles driven today from odometer delta across history
+  let milesDriven = null;
+  if (history && history.length >= 2) {
+    const odoms = history.map(h => h.odometer_miles).filter(o => o != null);
+    if (odoms.length >= 2) {
+      const delta = Math.max(...odoms) - Math.min(...odoms);
+      if (delta > 0) milesDriven = delta;
+    }
+  }
+  const milesDrivenStr = milesDriven != null
+    ? `${milesDriven.toFixed(1)} mi <span class="text-slate-600 text-sm font-normal">${(milesDriven * 1.609).toFixed(1)} km</span>`
+    : null;
+
+  let chargingExtra = '';
+  if (chgState === 'Charging') {
+    chargingExtra = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+      ${teslaStatCard('Charger Power', t.charger_power_kw != null ? t.charger_power_kw + ' kW' : null, 'text-green-400')}
+      ${teslaStatCard('Charge Rate', t.charge_rate_mph != null ? t.charge_rate_mph.toFixed(1) + ' mph' : null)}
+      ${teslaStatCard('Energy Added', t.charge_energy_added_kwh != null ? t.charge_energy_added_kwh.toFixed(2) + ' kWh' : null)}
+      ${teslaStatCard('Time to Full', t.minutes_to_full_charge != null ? fmt(t.minutes_to_full_charge) : null, 'text-blue-400')}
+    </div>`;
+  }
+
+  // 24h range chart
+  const hasHistory = history && history.length > 1;
+  const rangeChartHtml = hasHistory
+    ? `<div class="mt-5">
+        <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Range — Last 24h</p>
+        <canvas id="tesla-range-chart" style="max-height:160px"></canvas>
+       </div>`
+    : '';
+
+  return `
+  <!-- Key metrics row -->
+  <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
+
+    <!-- Battery (spans 1 col, large) -->
+    <div class="bg-slate-800/60 rounded-lg p-4 col-span-1">
+      <div class="flex items-end gap-1.5 mb-1">
+        <span class="text-3xl font-bold text-white">${t.battery_level ?? '—'}</span>
+        <span class="text-lg text-slate-400 mb-0.5">%</span>
+      </div>
+      <div class="text-xs text-slate-500 uppercase tracking-wider">Battery</div>
+      ${batteryBar(t.battery_level)}
+      <div class="text-xs ${chgClr} mt-1.5">${chgState}${t.charge_limit_soc != null ? ` · limit ${t.charge_limit_soc}%` : ''}</div>
+    </div>
+
+    <!-- Range -->
+    <div class="bg-slate-800/60 rounded-lg p-4">
+      <div class="text-2xl font-bold text-emerald-400">${rangeMi != null ? rangeMi + ' mi' : '—'}</div>
+      <div class="text-xs text-slate-600 mt-0.5">est ${estMi != null ? estMi + ' mi' : '—'}</div>
+      <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Range</div>
+    </div>
+
+    <!-- Miles Driven -->
+    <div class="bg-slate-800/60 rounded-lg p-4">
+      <div class="text-2xl font-bold text-sky-400">${milesDrivenStr != null ? `<span>${milesDriven.toFixed(1)} mi</span>` : '—'}</div>
+      ${milesDriven != null ? `<div class="text-xs text-slate-600 mt-0.5">${(milesDriven * 1.609).toFixed(1)} km</div>` : ''}
+      <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Driven (24h)</div>
+    </div>
+
+    <!-- Inside Temp -->
+    <div class="bg-slate-800/60 rounded-lg p-4">
+      <div class="text-2xl font-bold text-orange-300">${t.inside_temp_c != null ? t.inside_temp_c.toFixed(1) + '°C' : '—'}</div>
+      ${t.inside_temp_c != null ? `<div class="text-xs text-slate-600 mt-0.5">${(t.inside_temp_c * 9/5 + 32).toFixed(1)}°F</div>` : ''}
+      <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Inside Temp</div>
+      ${t.is_climate_on ? '<div class="text-xs text-green-400 mt-1">Climate On</div>' : ''}
+    </div>
+
+    <!-- Outside Temp -->
+    <div class="bg-slate-800/60 rounded-lg p-4">
+      <div class="text-2xl font-bold text-blue-300">${t.outside_temp_c != null ? t.outside_temp_c.toFixed(1) + '°C' : '—'}</div>
+      ${t.outside_temp_c != null ? `<div class="text-xs text-slate-600 mt-0.5">${(t.outside_temp_c * 9/5 + 32).toFixed(1)}°F</div>` : ''}
+      <div class="text-xs text-slate-500 uppercase tracking-wider mt-1">Outside Temp</div>
+    </div>
+
+  </div>
+
+  ${chargingExtra}
+
+  ${rangeChartHtml}
+
+  <!-- Status row -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+    ${teslaStatCard('Locked', t.locked != null ? (t.locked ? 'Locked' : '⚠ Unlocked') : null, t.locked ? 'text-green-400' : 'text-red-400')}
+    ${teslaStatCard('Sentry', t.sentry_mode ? 'On' : 'Off', t.sentry_mode ? 'text-green-400' : 'text-slate-500')}
+    ${teslaStatCard('Doors', doors, doors === 'Closed' ? 'text-slate-300' : 'text-red-400')}
+    ${teslaStatCard('Windows', windows, windows === 'Closed' ? 'text-slate-300' : 'text-yellow-400')}
+    ${teslaStatCard('Odometer', t.odometer_miles != null ? Math.round(t.odometer_miles).toLocaleString() + ' mi' : null)}
+    ${teslaStatCard('Tires FL/FR/RL/RR (bar)', tpmsStr)}
+    ${teslaStatCard('Software', t.software_version)}
+    ${teslaStatCard('Shift State', t.shift_state ?? 'Parked')}
+  </div>`;
+}
+
+function initTeslaRangeChart(history) {
+  if (!history || history.length < 2) return;
+  const canvas = document.getElementById('tesla-range-chart');
+  if (!canvas) return;
+  const labels = history.map(h => new Date(h.recorded_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }));
+  const rangeMi = history.map(h => h.battery_range_miles != null ? Math.round(h.battery_range_miles) : null);
+  const battery = history.map(h => h.battery_level);
+  if (charts['tesla-range']) charts['tesla-range'].destroy();
+  charts['tesla-range'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Range (mi)',
+          data: rangeMi,
+          borderColor: '#34d399',
+          backgroundColor: 'rgba(52,211,153,0.08)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Battery %',
+          data: battery,
+          borderColor: '#60a5fa',
+          backgroundColor: 'transparent',
+          tension: 0.3,
+          pointRadius: 2,
+          borderDash: [4, 3],
+          yAxisID: 'y2',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: { legend: { display: true, position: 'bottom', labels: { color: '#64748b', font: { size: 11 }, padding: 12, boxWidth: 12, boxHeight: 12 } } },
+      scales: {
+        x: { grid: { color: '#1e2235' }, ticks: { color: '#475569', font: { size: 10 }, maxTicksLimit: 8 } },
+        y: { grid: { color: '#1e2235' }, ticks: { color: '#34d399', font: { size: 10 } }, title: { display: true, text: 'Range (mi)', color: '#34d399', font: { size: 10 } } },
+        y2: { position: 'right', grid: { display: false }, ticks: { color: '#60a5fa', font: { size: 10 } }, title: { display: true, text: 'Battery %', color: '#60a5fa', font: { size: 10 } }, min: 0, max: 100 },
+      },
+    },
+  });
+}
+
+async function loadTesla() {
+  const el = document.getElementById('tesla-content');
+  const upd = document.getElementById('tesla-updated');
+  try {
+    const [latest, history] = await Promise.all([
+      fetch('data/tesla/latest.json').then(r => r.ok ? r.json() : null),
+      fetch('data/tesla/history-24h.json').then(r => r.ok ? r.json() : []),
+    ]);
+    if (latest && latest.recorded_at) {
+      upd.textContent = 'as of ' + new Date(latest.recorded_at).toLocaleString();
+    }
+    el.innerHTML = renderTesla(latest, history);
+    initTeslaRangeChart(history);
+  } catch {
+    el.innerHTML = renderTesla(null, null);
+  }
+}
+
+const picker = document.getElementById('workout-date');
+picker.max = todayStr();
+picker.value = todayStr();
+picker.addEventListener('change', () => loadWorkoutDetail(picker.value));
+document.getElementById('tz-select').addEventListener('change', () => { load(); loadWorkoutDetail(picker.value); });
+
+load();
+loadWorkoutDetail(todayStr());
+loadTesla();
+</script>
+</body>
+</html>
